@@ -1,0 +1,225 @@
+#include <cmath>
+#include <immintrin.h>
+#include <omp.h>
+#include "gl_utils.h"
+#include "julia.h"
+
+constexpr int MAX_ITERS = 1000;
+constexpr float R_s = 2.0f;
+constexpr double R_d = 2.0;
+constexpr int VEC_SIZE_S = 16;
+constexpr int VEC_SIZE_D = 8;
+
+__m512 evaluate(__m512 z_re, __m512 z_im, __m512 c_re, __m512 c_im) {
+  __m512 R2 = _mm512_set1_ps(R_s * R_s);
+  __mmask16 active = 0xFFFF;
+  __m512 escape_iter = _mm512_set1_ps(MAX_ITERS);
+  __m512 escape_abs2 = _mm512_set1_ps(0);
+
+  for (int i = 0; i < MAX_ITERS; ++i) {
+
+    // compute squared magnitude of z
+    __m512 z_re2 = _mm512_mul_ps(z_re, z_re);
+    __m512 z_im2 = _mm512_mul_ps(z_im, z_im);
+    __m512 z_abs2 = _mm512_add_ps(z_re2, z_im2);
+
+    // compare with R^2 to see which active elements escaped
+    __mmask16 escaped = _mm512_mask_cmp_ps_mask(active, z_abs2, R2, _CMP_GE_OQ);
+
+    // save escape iteration and square magnitude
+    __m512 iter = _mm512_set1_ps(i);
+    escape_iter = _mm512_mask_blend_ps(escaped, escape_iter, iter);
+    escape_abs2 = _mm512_mask_blend_ps(escaped, escape_abs2, z_abs2);
+
+    // update active elements and break if done
+    active = active & ~escaped;
+    if (active == 0)
+      break;
+
+    // iterate z
+    __m512 tmp = _mm512_mul_ps(_mm512_set1_ps(2.f), z_re);
+    z_im = _mm512_fmadd_ps(tmp, z_im, c_im);
+    z_re = _mm512_add_ps(_mm512_sub_ps(z_re2, z_im2), c_re);
+  }
+
+  // postprocess to reduce color banding: iter + 1 - log(log(abs(z)))/log(2)
+  __m512 smoother = _mm512_sqrt_ps(escape_abs2);
+
+  // let compiler auto vectorize log function since it is not avx intrinsic
+  alignas(64) float temp[VEC_SIZE_S];
+  _mm512_store_ps(temp, smoother);
+  for (int i = 0; i < VEC_SIZE_S; ++i) {
+    temp[i] = logf(logf(temp[i]));
+  }
+  smoother = _mm512_load_ps(temp);
+
+  __m512 neg_inv_log2 = _mm512_set1_ps(-1.f / logf(2));
+  __m512 one = _mm512_set1_ps(1.f);
+  smoother = _mm512_fmadd_ps(smoother, neg_inv_log2, one);
+  escape_iter = _mm512_mask_add_ps(escape_iter, ~active, escape_iter, smoother);
+  return escape_iter;
+}
+
+__m512d evaluate(__m512d z_re, __m512d z_im, __m512d c_re, __m512d c_im) {
+  __m512d R2 = _mm512_set1_pd(R_d * R_d);
+  __mmask8 active = 0xFF;
+  __m512d escape_iter = _mm512_set1_pd(MAX_ITERS);
+  __m512d escape_abs2 = _mm512_set1_pd(0);
+
+  for (int i = 0; i < MAX_ITERS; ++i) {
+
+    // compute squared magnitude of z
+    __m512d z_re2 = _mm512_mul_pd(z_re, z_re);
+    __m512d z_im2 = _mm512_mul_pd(z_im, z_im);
+    __m512d z_abs2 = _mm512_add_pd(z_re2, z_im2);
+
+    // compare with R^2 to see which active elements escaped
+    __mmask8 escaped = _mm512_mask_cmp_pd_mask(active, z_abs2, R2, _CMP_GE_OQ);
+
+    // save escape iteration and square magnitude
+    __m512d iter = _mm512_set1_pd(i);
+    escape_iter = _mm512_mask_blend_pd(escaped, escape_iter, iter);
+    escape_abs2 = _mm512_mask_blend_pd(escaped, escape_abs2, z_abs2);
+
+    // update active elements and break if done
+    active = active & ~escaped;
+    if (active == 0)
+      break;
+
+    // iterate z
+    __m512d tmp = _mm512_mul_pd(_mm512_set1_pd(2.0), z_re);
+    z_im = _mm512_fmadd_pd(tmp, z_im, c_im);
+    z_re = _mm512_add_pd(_mm512_sub_pd(z_re2, z_im2), c_re);
+  }
+
+  // postprocess to reduce color banding: iter + 1 - log(log(abs(z)))/log(2)
+  __m512d smoother = _mm512_sqrt_pd(escape_abs2);
+
+  // let compiler auto vectorize log function since it is not avx intrinsic
+  alignas(64) double temp[VEC_SIZE_D];
+  _mm512_store_pd(temp, smoother);
+  for (int i = 0; i < VEC_SIZE_D; ++i) {
+    temp[i] = log(log(temp[i]));
+  }
+  smoother = _mm512_load_pd(temp);
+
+  __m512d neg_inv_log2 = _mm512_set1_pd(-1.0 / log(2.0));
+  __m512d one = _mm512_set1_pd(1.0);
+  smoother = _mm512_fmadd_pd(smoother, neg_inv_log2, one);
+  escape_iter = _mm512_mask_add_pd(escape_iter, ~active, escape_iter, smoother);
+  return escape_iter;
+}
+
+void julia(unsigned char *colors, float range, float x_offset, float y_offset,
+           float c_re, float c_im, int n_pixels) {
+
+  // vectorize c
+  __m512 c_re_vec = _mm512_set1_ps(c_re);
+  __m512 c_im_vec = _mm512_set1_ps(c_im);
+
+  // get deltas for vectorizing real part
+  float re_delta = (2.f * range) / (n_pixels - 1);
+  __m512 re_delta_vec = _mm512_set1_ps(re_delta);
+  __m512i index_ivec =
+      _mm512_set_epi32(15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0);
+  __m512 index_vec = _mm512_cvtepi32_ps(index_ivec);
+
+#pragma omp parallel for schedule(dynamic)
+  for (int y = 0; y < n_pixels; ++y) {
+    // vectorize imaginary part (const across vector)
+    float im = ((float)y / (n_pixels - 1)) * range * 2 - range - y_offset;
+    __m512 z_im_vec = _mm512_set1_ps(im);
+
+    for (int x = 0; x < n_pixels; x += VEC_SIZE_S) {
+      // vectorize real part (16 consecutive pixels in a row)
+      float re = ((float)x / (n_pixels - 1)) * range * 2 - range - x_offset;
+      __m512 z_re_vec = _mm512_set1_ps(re);
+      z_re_vec = _mm512_fmadd_ps(index_vec, re_delta_vec, z_re_vec);
+
+      // evaluate pixels
+      __m512 result_vec = evaluate(z_re_vec, z_im_vec, c_re_vec, c_im_vec);
+
+      // map colors
+      // compiler auto vectorizes the sinf calls at least
+      alignas(64) float temp[VEC_SIZE_S];
+      _mm512_store_ps(temp, result_vec);
+      for (int i = 0; i < VEC_SIZE_S; ++i) {
+        unsigned char r, g, b;
+        if (temp[i] >= MAX_ITERS) {
+          r = 0;
+          g = 0;
+          b = 0;
+        } else {
+          r = (unsigned char)(sinf(temp[i] * 0.05f + 0.5f) * 127 + 128);
+          g = (unsigned char)(sinf(temp[i] * 0.05f + 1.0f) * 127 + 128);
+          b = (unsigned char)(sinf(temp[i] * 0.05f + 2.0f) * 127 + 128);
+        }
+        colors[(y * n_pixels + x + i) * 3] = r;
+        colors[(y * n_pixels + x + i) * 3 + 1] = g;
+        colors[(y * n_pixels + x + i) * 3 + 2] = b;
+      }
+    }
+  }
+}
+
+void julia(unsigned char *colors, double range, double x_offset,
+           double y_offset, double c_re, double c_im, int n_pixels) {
+
+  // vectorize c
+  __m512d c_re_vec = _mm512_set1_pd(c_re);
+  __m512d c_im_vec = _mm512_set1_pd(c_im);
+
+  // get deltas for vectorizing real part
+  double re_delta = (2.0 * range) / (n_pixels - 1);
+  __m512d re_delta_vec = _mm512_set1_pd(re_delta);
+  __m512i index_ivec = _mm512_set_epi64(7, 6, 5, 4, 3, 2, 1, 0);
+  __m512d index_vec = _mm512_cvtepi64_pd(index_ivec);
+
+#pragma omp parallel for schedule(dynamic)
+  for (int y = 0; y < n_pixels; ++y) {
+    // vectorize imaginary part (const across vector)
+    double im = ((double)y / (n_pixels - 1)) * range * 2 - range - y_offset;
+    __m512d z_im_vec = _mm512_set1_pd(im);
+
+    for (int x = 0; x < n_pixels; x += VEC_SIZE_D) {
+      // vectorize real part (8 consecutive pixels in a row)
+      double re = ((double)x / (n_pixels - 1)) * range * 2 - range - x_offset;
+      __m512d z_re_vec = _mm512_set1_pd(re);
+      z_re_vec = _mm512_fmadd_pd(index_vec, re_delta_vec, z_re_vec);
+
+      // evaluate pixels
+      __m512d result_vec = evaluate(z_re_vec, z_im_vec, c_re_vec, c_im_vec);
+
+      // map colors
+      // compiler auto vectorizes the sin calls at least
+      alignas(64) double temp[VEC_SIZE_D];
+      _mm512_store_pd(temp, result_vec);
+      for (int i = 0; i < VEC_SIZE_D; ++i) {
+        unsigned char r, g, b;
+        if (temp[i] >= MAX_ITERS) {
+          r = 0;
+          g = 0;
+          b = 0;
+        } else {
+          r = (unsigned char)(sin(temp[i] * 0.05 + 0.5) * 127 + 128);
+          g = (unsigned char)(sin(temp[i] * 0.05 + 1.0) * 127 + 128);
+          b = (unsigned char)(sin(temp[i] * 0.05 + 2.0) * 127 + 128);
+        }
+        colors[(y * n_pixels + x + i) * 3] = r;
+        colors[(y * n_pixels + x + i) * 3 + 1] = g;
+        colors[(y * n_pixels + x + i) * 3 + 2] = b;
+      }
+    }
+  }
+}
+
+void compute_julia(ProgramState state, unsigned char *buffer) {
+  if (state.zoomLevel < 10000) {
+    julia(buffer, (float)(1.0 / state.zoomLevel), (float)state.x_offset,
+          (float)state.y_offset, (float)state.c_re, (float)state.c_im,
+          state.width);
+  } else {
+    julia(buffer, 1.0 / state.zoomLevel, state.x_offset, state.y_offset,
+          state.c_re, state.c_im, state.width);
+  }
+}
