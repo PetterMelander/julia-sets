@@ -8,7 +8,6 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -march=native -fopenmp -ffast-math
 
 add_library(julia_lib
     vendor/glad/src/glad.c
-    src/stb_image.cpp
     src/julia_avx.cpp
     src/gl_utils.cpp
 )

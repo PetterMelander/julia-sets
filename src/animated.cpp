@@ -2,13 +2,9 @@
 #include <cstddef>
 #include <glad/glad.h>
 #include <GL/gl.h>
+#include <GL/glext.h>
 #include <GLFW/glfw3.h>
-#include <iostream>
-#include <immintrin.h>
-#include <mm_malloc.h>
-#include <ostream>
 #include "shader.h"
-#include "stb_image.h"
 #include "julia.h"
 #include "gl_utils.h"
 
@@ -19,9 +15,6 @@ int main() {
   state.height = 1024;
   state.c_re = 0.35;
   state.c_im = 0.35;
-
-  unsigned char *buffer = (unsigned char *)_mm_malloc(
-      sizeof(unsigned char) * state.width * state.height * 3, 64);
 
   glfwInit();
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -50,16 +43,21 @@ int main() {
   glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
   glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
+  GLuint pboIds[2];
+  int dsize = sizeof(unsigned char) * state.width * state.height * 3;
+  glGenBuffers(2, pboIds);
+  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pboIds[0]);
+  glBufferData(GL_PIXEL_UNPACK_BUFFER, dsize, 0, GL_STREAM_DRAW);
+  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pboIds[1]);
+  glBufferData(GL_PIXEL_UNPACK_BUFFER, dsize, 0, GL_STREAM_DRAW);
+
   unsigned int texture1;
   glGenTextures(1, &texture1);
   glBindTexture(GL_TEXTURE_2D, texture1);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, state.width, state.height, 0, GL_RGB,
-               GL_UNSIGNED_BYTE, buffer);
+               GL_UNSIGNED_BYTE, 0);
 
   unsigned int VAO;
   glGenVertexArrays(1, &VAO);
@@ -92,6 +90,7 @@ int main() {
   double length = 0.7885;
   double theta = 0.0;
   bool paused = false;
+  int index = 0;
   while (!glfwWindowShouldClose(window)) {
     process_input(window);
 
@@ -114,13 +113,24 @@ int main() {
     if (!paused || state.needs_redraw) {
       state.c_re = length * cos(theta);
       state.c_im = length * sin(theta);
-      compute_julia(state, buffer);
-    }
 
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, texture1);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, state.width, state.height, GL_RGB,
-                    GL_UNSIGNED_BYTE, buffer);
+      index = (index + 1) % 2;
+      int nextIndex = (index + 1) % 2;
+
+      glBindTexture(GL_TEXTURE_2D, texture1);
+      glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pboIds[index]);
+      glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, state.width, state.height, GL_RGB,
+                      GL_UNSIGNED_BYTE, 0);
+
+      glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pboIds[nextIndex]);
+      unsigned char *buffer =
+          (unsigned char *)glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY);
+      if (buffer) {
+        compute_julia(state, buffer);
+      }
+      glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
+      glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+    }
 
     int mouse_state = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT);
     if (mouse_state != GLFW_PRESS) {
@@ -142,6 +152,5 @@ int main() {
   }
 
   glfwTerminate();
-  _mm_free(buffer);
   return 0;
 }
