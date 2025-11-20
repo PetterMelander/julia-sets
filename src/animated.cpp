@@ -1,11 +1,14 @@
 #include <cmath>
 #include <cstddef>
+#include <cuda_runtime_api.h>
+#include <driver_types.h>
 #include <glad/glad.h>
-#include <GL/gl.h>
-#include <GL/glext.h>
 #include <GLFW/glfw3.h>
+#include <cuda_runtime.h>
+#include <cuda_gl_interop.h>
 #include "shader.h"
-#include "julia.h"
+#include "avx_kernels.h"
+#include "cuda_kernels.cuh"
 #include "gl_utils.h"
 
 int main() {
@@ -38,6 +41,7 @@ int main() {
   glfwSetWindowUserPointer(window, &state);
   glfwSetScrollCallback(window, scroll_callback);
   glfwSetMouseButtonCallback(window, mouse_button_callback);
+  glfwSetKeyCallback(window, key_callback);
 
   glViewport(0, 0, state.width, state.height);
   glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -47,13 +51,31 @@ int main() {
   int dsize = sizeof(unsigned char) * state.width * state.height * 3;
   glGenBuffers(2, pboIds);
   glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pboIds[0]);
-  glBufferData(GL_PIXEL_UNPACK_BUFFER, dsize, 0, GL_STREAM_DRAW);
+  glBufferData(GL_PIXEL_UNPACK_BUFFER, dsize, 0, GL_DYNAMIC_DRAW);
   glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pboIds[1]);
-  glBufferData(GL_PIXEL_UNPACK_BUFFER, dsize, 0, GL_STREAM_DRAW);
+  glBufferData(GL_PIXEL_UNPACK_BUFFER, dsize, 0, GL_DYNAMIC_DRAW);
 
-  unsigned int texture1;
-  glGenTextures(1, &texture1);
-  glBindTexture(GL_TEXTURE_2D, texture1);
+  cudaGraphicsResource *cudaPboResources[2];
+  CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&cudaPboResources[0], pboIds[0],
+                                          cudaGraphicsMapFlagsWriteDiscard));
+  CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&cudaPboResources[1], pboIds[1],
+                                          cudaGraphicsMapFlagsWriteDiscard));
+
+  // cudaStream_t streams[2];
+  // CUDA_CHECK(cudaStreamCreate(&streams[0]));
+  // CUDA_CHECK(cudaStreamCreate(&streams[1]));
+
+  // unsigned char *h_cuda_buffers[2];
+  // cudaMallocHost(&h_cuda_buffers[0], dsize);
+  // cudaMallocHost(&h_cuda_buffers[1], dsize);
+
+  // unsigned char *d_cuda_buffers[2];
+  // cudaMalloc(&d_cuda_buffers[0], dsize);
+  // cudaMalloc(&d_cuda_buffers[1], dsize);
+
+  unsigned int texture;
+  glGenTextures(1, &texture);
+  glBindTexture(GL_TEXTURE_2D, texture);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, state.width, state.height, 0, GL_RGB,
@@ -88,69 +110,56 @@ int main() {
   shader.setInt("texture1", 0);
 
   double length = 0.7885;
-  double theta = 0.0;
-  bool paused = false;
-  int index = 0;
+  int buffer_index = 0;
+  bool needs_texture_switch = false;
   while (!glfwWindowShouldClose(window)) {
-    process_input(window);
-
     update_pan(state, window);
 
-    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS) {
-      paused = !paused;
-    }
-    if (!paused) {
-      theta += 0.001;
-    } else {
-      if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
-        theta -= 0.001 / state.zoomLevel;
-        state.needs_redraw = true;
-      } else if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
-        theta += 0.001 / state.zoomLevel;
-        state.needs_redraw = true;
+    process_fractal_update(state, window);
+
+    if (state.needs_redraw) {
+      state.c_re = length * cos(state.theta);
+      state.c_im = length * sin(state.theta);
+
+      buffer_index = (buffer_index + 1) % 2;
+      int nextIndex = (buffer_index + 1) % 2;
+
+      switch_texture(state, buffer_index, texture, pboIds);
+
+      if (state.zoomLevel < 10000) {
+        unsigned char *d_buffer = nullptr;
+        CUDA_CHECK(
+            cudaGraphicsMapResources(1, &cudaPboResources[nextIndex], 0));
+        CUDA_CHECK(cudaGraphicsResourceGetMappedPointer(
+            (void **)&d_buffer, nullptr, cudaPboResources[nextIndex]));
+        compute_julia_cuda(state, d_buffer);
+        CUDA_CHECK(
+            cudaGraphicsUnmapResources(1, &cudaPboResources[nextIndex], 0));
+      } else {
+        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pboIds[nextIndex]);
+        unsigned char *buffer =
+            (unsigned char *)glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY);
+        if (buffer) {
+          compute_julia_avx(state, buffer);
+        }
+        glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
       }
-    }
-    if (!paused || state.needs_redraw) {
-      state.c_re = length * cos(theta);
-      state.c_im = length * sin(theta);
-
-      index = (index + 1) % 2;
-      int nextIndex = (index + 1) % 2;
-
-      glBindTexture(GL_TEXTURE_2D, texture1);
-      glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pboIds[index]);
-      glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, state.width, state.height, GL_RGB,
-                      GL_UNSIGNED_BYTE, 0);
-
-      glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pboIds[nextIndex]);
-      unsigned char *buffer =
-          (unsigned char *)glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY);
-      if (buffer) {
-        compute_julia(state, buffer);
-      }
-      glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
       glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-    }
 
-    int mouse_state = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT);
-    if (mouse_state != GLFW_PRESS) {
       state.needs_redraw = false;
+      needs_texture_switch = true;
+
+      redraw_image(window, shader, texture, VAO);
+    } else if (needs_texture_switch) {
+      int nextIndex = (buffer_index + 1) % 2;
+      switch_texture(state, nextIndex, texture, pboIds);
+      needs_texture_switch = false;
+
+      redraw_image(window, shader, texture, VAO);
     }
 
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    shader.use();
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, texture1);
-
-    glBindVertexArray(VAO);
-    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-
-    glfwSwapBuffers(window);
     glfwPollEvents();
   }
-
   glfwTerminate();
   return 0;
 }

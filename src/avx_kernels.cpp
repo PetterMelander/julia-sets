@@ -2,7 +2,9 @@
 #include <immintrin.h>
 #include <omp.h>
 #include "gl_utils.h"
-#include "julia.h"
+#include "avx_kernels.h"
+
+// TODO: handle image sizes not multiples of 16
 
 constexpr int MAX_ITERS = 1000;
 constexpr float R_s = 2.0f;
@@ -213,13 +215,8 @@ void julia(unsigned char *colors, double range, double x_offset,
   }
 }
 
-void compute_julia(ProgramState state, unsigned char *buffer) {
-  if (state.zoomLevel < 10000) {
-    julia(buffer, (float)(1.0 / state.zoomLevel), (float)state.x_offset,
-          (float)state.y_offset, (float)state.c_re, (float)state.c_im,
-          state.width);
-  } else {
-    julia(buffer, 1.0 / state.zoomLevel, state.x_offset, state.y_offset,
-          state.c_re, state.c_im, state.width);
-  }
+void compute_julia_avx(ProgramState state,
+                       unsigned char *buffer) { // TODO: move to gl_utils?
+  julia(buffer, 1.0 / state.zoomLevel, state.x_offset, state.y_offset,
+        state.c_re, state.c_im, state.width);
 }
