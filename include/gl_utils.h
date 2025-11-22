@@ -3,7 +3,8 @@
 #include <GLFW/glfw3.h>
 #include "shader.h"
 
-struct ProgramState {
+struct ProgramState
+{
   double c_re = 0.0;
   double c_im = 0.0;
   double theta = 0.0;

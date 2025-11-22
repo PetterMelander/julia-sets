@@ -1,18 +1,23 @@
 #include "gl_utils.h"
 #include "shader.h"
 
-void framebuffer_size_callback(GLFWwindow *window, int width, int height) {
+void framebuffer_size_callback(GLFWwindow *window, int width, int height)
+{
   glViewport(0, 0, width, height);
 }
 
-void scroll_callback(GLFWwindow *window, double xoffset, double yoffset) {
+void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
+{
   ProgramState *state =
       static_cast<ProgramState *>(glfwGetWindowUserPointer(window));
 
   double oldZoom = state->zoomLevel;
-  if (yoffset > 0) {
+  if (yoffset > 0)
+  {
     state->zoomLevel *= 1.1;
-  } else {
+  }
+  else
+  {
     state->zoomLevel /= 1.1;
   }
 
@@ -27,11 +32,13 @@ void scroll_callback(GLFWwindow *window, double xoffset, double yoffset) {
 }
 
 void mouse_button_callback(GLFWwindow *window, int button, int action,
-                           int mods) {
+                           int mods)
+{
   ProgramState *state =
       static_cast<ProgramState *>(glfwGetWindowUserPointer(window));
 
-  if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+  if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS)
+  {
     double xPos, yPos;
     glfwGetCursorPos(window, &xPos, &yPos);
     state->tracking_mouse = true;
@@ -40,25 +47,31 @@ void mouse_button_callback(GLFWwindow *window, int button, int action,
     state->needs_redraw = true;
   }
 
-  if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE) {
+  if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE)
+  {
     state->tracking_mouse = false;
   }
 }
 
 void key_callback(GLFWwindow *window, int key, int scancode, int action,
-    int mods) {
-  if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
+                  int mods)
+{
+  if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
+  {
     glfwSetWindowShouldClose(window, true);
   }
-  if (key == GLFW_KEY_SPACE && action == GLFW_PRESS) {
+  if (key == GLFW_KEY_SPACE && action == GLFW_PRESS)
+  {
     ProgramState *state =
         static_cast<ProgramState *>(glfwGetWindowUserPointer(window));
     state->paused = !state->paused;
   }
 }
 
-void update_pan(ProgramState &state, GLFWwindow *window) {
-  if (state.tracking_mouse) {
+void update_pan(ProgramState &state, GLFWwindow *window)
+{
+  if (state.tracking_mouse)
+  {
     double xPos, yPos;
     glfwGetCursorPos(window, &xPos, &yPos);
     state.x_offset -=
@@ -72,20 +85,27 @@ void update_pan(ProgramState &state, GLFWwindow *window) {
   }
 }
 
-void process_fractal_update(ProgramState& state, GLFWwindow *window) {
-  if (!state.paused) {
+void process_fractal_update(ProgramState &state, GLFWwindow *window)
+{
+  if (!state.paused)
+  {
     state.theta += 0.001;
     state.needs_redraw = true;
-  } else if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
+  }
+  else if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS)
+  {
     state.theta -= 0.001 / state.zoomLevel;
     state.needs_redraw = true;
-  } else if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
+  }
+  else if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS)
+  {
     state.theta += 0.001 / state.zoomLevel;
     state.needs_redraw = true;
   }
 }
 
-void redraw_image(GLFWwindow *window, Shader shader, unsigned int texture, unsigned int VAO) {
+void redraw_image(GLFWwindow *window, Shader shader, unsigned int texture, unsigned int VAO)
+{
   glClear(GL_COLOR_BUFFER_BIT);
 
   shader.use();
@@ -100,7 +120,8 @@ void redraw_image(GLFWwindow *window, Shader shader, unsigned int texture, unsig
 }
 
 void switch_texture(ProgramState &state, int index, unsigned int texture,
-                    GLuint *pboIds) {
+                    GLuint *pboIds)
+{
   glBindTexture(GL_TEXTURE_2D, texture);
   glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pboIds[index]);
   glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, state.width, state.height, GL_RGB,

@@ -14,12 +14,14 @@
 
 #ifdef WIN32
 #include <windows.h>
-extern "C" {
-__declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
+extern "C"
+{
+  __declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
 }
 #endif
 
-int main() {
+int main()
+{
 
   ProgramState state;
   state.width = 1024;
@@ -34,14 +36,16 @@ int main() {
 
   GLFWwindow *window =
       glfwCreateWindow(state.width, state.height, "Julia", NULL, NULL);
-  if (window == NULL) {
+  if (window == NULL)
+  {
     std::cout << "Failed to create window" << std::endl;
     glfwTerminate();
     return -1;
   }
   glfwMakeContextCurrent(window);
 
-  if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
+  if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
+  {
     std::cout << "Failed to initialize GLAD" << std::endl;
     return -1;
   }
@@ -95,8 +99,8 @@ int main() {
   glGenVertexArrays(1, &VAO);
   glBindVertexArray(VAO);
 
-  float vertices[] = {1.0f,  1.0f,  1.0f, 1.0f, 1.0f,  -1.0f, 1.0f, 0.0f,
-                      -1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 1.0f,  0.0f, 1.0f};
+  float vertices[] = {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, -1.0f, 1.0f, 0.0f,
+                      -1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 1.0f, 0.0f, 1.0f};
   unsigned int VBO;
   glGenBuffers(1, &VBO);
   glBindBuffer(GL_ARRAY_BUFFER, VBO);
@@ -125,20 +129,24 @@ int main() {
   auto clock = std::chrono::high_resolution_clock();
   auto start = clock.now();
   int frames = 0;
-  glfwSwapInterval(0);
-  while (!glfwWindowShouldClose(window)) {
+  // glfwSwapInterval(0);
+  while (!glfwWindowShouldClose(window))
+  {
     update_pan(state, window);
 
     process_fractal_update(state, window);
 
-    if (state.needs_redraw) {
-      state.c_re = length * cos(state.theta);
-      state.c_im = length * sin(state.theta);
+    if (state.needs_redraw)
+    {
+      // state.c_re = length * cos(state.theta);
+      // state.c_im = length * sin(state.theta);
+      state.c_re = 1.5 * sin(sqrt(2)*state.theta + M_PI/2.0);
+      state.c_im = 1.5 * sin(state.theta);
 
       buffer_index = (buffer_index + 1) % 2;
       int nextIndex = (buffer_index + 1) % 2;
 
-      if (state.zoomLevel < 10000) {
+      if (state.zoomLevel < -1) {
         unsigned char *d_buffer = nullptr;
         CUDA_CHECK(
             cudaGraphicsMapResources(1, &cudaPboResources[nextIndex], 0));
@@ -147,14 +155,16 @@ int main() {
         compute_julia_cuda(state, d_buffer);
         CUDA_CHECK(
             cudaGraphicsUnmapResources(1, &cudaPboResources[nextIndex], 0));
-      } else {
+      }
+      else
+      {
         compute_julia_avx(state, h_cuda_buffers[nextIndex]);
         cudaMemcpyAsync(d_cuda_buffers[nextIndex], h_cuda_buffers[nextIndex],
                         raw_dsize, cudaMemcpyHostToDevice, streams[nextIndex]);
 
         unsigned char *d_buffer = nullptr;
         CUDA_CHECK(cudaGraphicsMapResources(1, &cudaPboResources[nextIndex],
-                                            streams[2]));
+                                            streams[2])); // TODO: decide on stream and placement
         CUDA_CHECK(cudaGraphicsResourceGetMappedPointer(
             (void **)&d_buffer, nullptr, cudaPboResources[nextIndex]));
 
@@ -165,23 +175,28 @@ int main() {
       }
       glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
 
-      state.needs_redraw = false;
-      needs_texture_switch = true;
-
       CUDA_CHECK(cudaStreamSynchronize(streams[buffer_index]));
       switch_texture(state, buffer_index, texture, pboIds);
 
+      state.needs_redraw = false;
+      needs_texture_switch = true;
+
       redraw_image(window, shader, texture, VAO);
       ++frames;
-    } else if (needs_texture_switch) {
+    }
+    else if (needs_texture_switch)
+    {
       int nextIndex = (buffer_index + 1) % 2;
+      CUDA_CHECK(cudaStreamSynchronize(streams[buffer_index]));
       switch_texture(state, nextIndex, texture, pboIds);
+
       needs_texture_switch = false;
 
       redraw_image(window, shader, texture, VAO);
       ++frames;
     }
-    if (frames == 6283) {
+    if (frames == 6283)
+    {
       auto end = clock.now();
       const std::chrono::duration<double> diff = end - start;
       std::cout << "fps: " << 6283 / diff.count() << std::endl;
