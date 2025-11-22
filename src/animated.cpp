@@ -55,6 +55,20 @@ int main() {
   glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
   glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
+  int raw_dsize = state.width * state.height * sizeof(float);
+  cudaStream_t streams[3];
+  CUDA_CHECK(cudaStreamCreate(&streams[0]));
+  CUDA_CHECK(cudaStreamCreate(&streams[1]));
+  CUDA_CHECK(cudaStreamCreate(&streams[2]));
+
+  float *h_cuda_buffers[2];
+  cudaMallocHost(&h_cuda_buffers[0], raw_dsize);
+  cudaMallocHost(&h_cuda_buffers[1], raw_dsize);
+
+  float *d_cuda_buffers[2];
+  cudaMalloc(&d_cuda_buffers[0], raw_dsize);
+  cudaMalloc(&d_cuda_buffers[1], raw_dsize);
+
   GLuint pboIds[2];
   int dsize = sizeof(unsigned char) * state.width * state.height * 3;
   glGenBuffers(2, pboIds);
@@ -124,8 +138,6 @@ int main() {
       buffer_index = (buffer_index + 1) % 2;
       int nextIndex = (buffer_index + 1) % 2;
 
-      switch_texture(state, buffer_index, texture, pboIds);
-
       if (state.zoomLevel < 10000) {
         unsigned char *d_buffer = nullptr;
         CUDA_CHECK(
@@ -136,18 +148,28 @@ int main() {
         CUDA_CHECK(
             cudaGraphicsUnmapResources(1, &cudaPboResources[nextIndex], 0));
       } else {
-        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pboIds[nextIndex]);
-        unsigned char *buffer =
-            (unsigned char *)glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY);
-        if (buffer) {
-          compute_julia_avx(state, buffer);
-        }
-        glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
+        compute_julia_avx(state, h_cuda_buffers[nextIndex]);
+        cudaMemcpyAsync(d_cuda_buffers[nextIndex], h_cuda_buffers[nextIndex],
+                        raw_dsize, cudaMemcpyHostToDevice, streams[nextIndex]);
+
+        unsigned char *d_buffer = nullptr;
+        CUDA_CHECK(cudaGraphicsMapResources(1, &cudaPboResources[nextIndex],
+                                            streams[2]));
+        CUDA_CHECK(cudaGraphicsResourceGetMappedPointer(
+            (void **)&d_buffer, nullptr, cudaPboResources[nextIndex]));
+
+        map_colors_cuda(d_buffer, d_cuda_buffers[nextIndex],
+                        state.width * state.height, streams[nextIndex]);
+        CUDA_CHECK(cudaGraphicsUnmapResources(1, &cudaPboResources[nextIndex],
+                                              streams[nextIndex]));
       }
       glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
 
       state.needs_redraw = false;
       needs_texture_switch = true;
+
+      CUDA_CHECK(cudaStreamSynchronize(streams[buffer_index]));
+      switch_texture(state, buffer_index, texture, pboIds);
 
       redraw_image(window, shader, texture, VAO);
       ++frames;

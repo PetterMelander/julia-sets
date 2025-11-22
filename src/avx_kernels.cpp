@@ -113,28 +113,28 @@ __m512d evaluate(__m512d z_re, __m512d z_im, __m512d c_re, __m512d c_im) {
 }
 
 void julia(unsigned char *colors, float range, float x_offset, float y_offset,
-           float c_re, float c_im, int n_pixels) {
+           float c_re, float c_im, int width, int height) {
 
   // vectorize c
   __m512 c_re_vec = _mm512_set1_ps(c_re);
   __m512 c_im_vec = _mm512_set1_ps(c_im);
 
   // get deltas for vectorizing real part
-  float re_delta = (2.f * range) / (n_pixels - 1);
+  float re_delta = (2.f * range) / (width - 1);
   __m512 re_delta_vec = _mm512_set1_ps(re_delta);
   __m512i index_ivec =
       _mm512_set_epi32(15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0);
   __m512 index_vec = _mm512_cvtepi32_ps(index_ivec);
 
 #pragma omp parallel for schedule(dynamic)
-  for (int y = 0; y < n_pixels; ++y) {
+  for (int y = 0; y < height; ++y) {
     // vectorize imaginary part (const across vector)
-    float im = ((float)y / (n_pixels - 1)) * range * 2 - range - y_offset;
+    float im = ((float)y / (height - 1)) * range * 2 - range - y_offset;
     __m512 z_im_vec = _mm512_set1_ps(im);
 
-    for (int x = 0; x < n_pixels; x += VEC_SIZE_S) {
+    for (int x = 0; x < width; x += VEC_SIZE_S) {
       // vectorize real part (16 consecutive pixels in a row)
-      float re = ((float)x / (n_pixels - 1)) * range * 2 - range - x_offset;
+      float re = ((float)x / (width - 1)) * range * 2 - range - x_offset;
       __m512 z_re_vec = _mm512_set1_ps(re);
       z_re_vec = _mm512_fmadd_ps(index_vec, re_delta_vec, z_re_vec);
 
@@ -156,67 +156,49 @@ void julia(unsigned char *colors, float range, float x_offset, float y_offset,
           g = (unsigned char)(sinf(temp[i] * 0.05f + 1.0f) * 127 + 128);
           b = (unsigned char)(sinf(temp[i] * 0.05f + 2.0f) * 127 + 128);
         }
-        colors[(y * n_pixels + x + i) * 3] = r;
-        colors[(y * n_pixels + x + i) * 3 + 1] = g;
-        colors[(y * n_pixels + x + i) * 3 + 2] = b;
+        colors[(y * width + x + i) * 3] = r;
+        colors[(y * width + x + i) * 3 + 1] = g;
+        colors[(y * width + x + i) * 3 + 2] = b;
       }
     }
   }
 }
 
-void julia(unsigned char *colors, double range, double x_offset,
-           double y_offset, double c_re, double c_im, int n_pixels) {
+void julia(float *colors, double range, double x_offset, double y_offset,
+           double c_re, double c_im, int width, int height) {
 
   // vectorize c
   __m512d c_re_vec = _mm512_set1_pd(c_re);
   __m512d c_im_vec = _mm512_set1_pd(c_im);
 
   // get deltas for vectorizing real part
-  double re_delta = (2.0 * range) / (n_pixels - 1);
+  double re_delta = (2.0 * range) / (width - 1);
   __m512d re_delta_vec = _mm512_set1_pd(re_delta);
   __m512i index_ivec = _mm512_set_epi64(7, 6, 5, 4, 3, 2, 1, 0);
   __m512d index_vec = _mm512_cvtepi64_pd(index_ivec);
 
 #pragma omp parallel for schedule(dynamic)
-  for (int y = 0; y < n_pixels; ++y) {
+  for (int y = 0; y < height; ++y) {
     // vectorize imaginary part (const across vector)
-    double im = ((double)y / (n_pixels - 1)) * range * 2 - range - y_offset;
+    double im = ((double)y / (height - 1)) * range * 2 - range - y_offset;
     __m512d z_im_vec = _mm512_set1_pd(im);
 
-    for (int x = 0; x < n_pixels; x += VEC_SIZE_D) {
+    for (int x = 0; x < width; x += VEC_SIZE_D) {
       // vectorize real part (8 consecutive pixels in a row)
-      double re = ((double)x / (n_pixels - 1)) * range * 2 - range - x_offset;
+      double re = ((double)x / (width - 1)) * range * 2 - range - x_offset;
       __m512d z_re_vec = _mm512_set1_pd(re);
       z_re_vec = _mm512_fmadd_pd(index_vec, re_delta_vec, z_re_vec);
 
       // evaluate pixels
       __m512d result_vec = evaluate(z_re_vec, z_im_vec, c_re_vec, c_im_vec);
-
-      // map colors
-      // compiler auto vectorizes the sin calls at least
-      alignas(64) double temp[VEC_SIZE_D];
-      _mm512_store_pd(temp, result_vec);
-      for (int i = 0; i < VEC_SIZE_D; ++i) {
-        unsigned char r, g, b;
-        if (temp[i] >= MAX_ITERS) {
-          r = 0;
-          g = 0;
-          b = 0;
-        } else {
-          r = (unsigned char)(sin(temp[i] * 0.05 + 0.5) * 127 + 128);
-          g = (unsigned char)(sin(temp[i] * 0.05 + 1.0) * 127 + 128);
-          b = (unsigned char)(sin(temp[i] * 0.05 + 2.0) * 127 + 128);
-        }
-        colors[(y * n_pixels + x + i) * 3] = r;
-        colors[(y * n_pixels + x + i) * 3 + 1] = g;
-        colors[(y * n_pixels + x + i) * 3 + 2] = b;
-      }
+      __m256 float_vec = _mm512_cvtpd_ps(result_vec);
+      _mm256_store_ps(colors + y * width + x, float_vec);
     }
   }
 }
 
 void compute_julia_avx(ProgramState state,
-                       unsigned char *buffer) { // TODO: move to gl_utils?
+                       float *buffer) { // TODO: move to gl_utils?
   julia(buffer, 1.0 / state.zoomLevel, state.x_offset, state.y_offset,
-        state.c_re, state.c_im, state.width);
+        state.c_re, state.c_im, state.width, state.height);
 }

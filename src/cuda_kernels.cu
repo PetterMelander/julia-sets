@@ -76,8 +76,10 @@ void compute_julia_cuda(ProgramState state, unsigned char *buffer) {
   CUDA_CHECK(cudaGetLastError());
 }
 
-void map_colors_cuda(uchar3 *__restrict__ buffer, const float *__restrict__ intensities, const int dsize) {
+void map_colors_cuda(unsigned char *__restrict__ buffer, const float *__restrict__ intensities, const int dsize, cudaStream_t stream) {
+  uchar3 *buffer_ptr = reinterpret_cast<uchar3 *>(buffer);
+
   int num_blocks = (dsize + BLOCK_SIZE_1D - 1) / BLOCK_SIZE_1D;
-  map_colors<<<num_blocks, BLOCK_SIZE_1D>>>(buffer, intensities, dsize);
+  map_colors<<<num_blocks, BLOCK_SIZE_1D, 0, stream>>>(buffer_ptr, intensities, dsize);
   CUDA_CHECK(cudaGetLastError());
 }
