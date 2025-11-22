@@ -79,4 +79,5 @@ void compute_julia_cuda(ProgramState state, unsigned char *buffer) {
 void map_colors_cuda(uchar3 *__restrict__ buffer, const float *__restrict__ intensities, const int dsize) {
   int num_blocks = (dsize + BLOCK_SIZE_1D - 1) / BLOCK_SIZE_1D;
   map_colors<<<num_blocks, BLOCK_SIZE_1D>>>(buffer, intensities, dsize);
+  CUDA_CHECK(cudaGetLastError());
 }

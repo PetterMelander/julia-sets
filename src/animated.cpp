@@ -6,10 +6,18 @@
 #include <GLFW/glfw3.h>
 #include <cuda_runtime.h>
 #include <cuda_gl_interop.h>
+#include <chrono>
 #include "shader.h"
 #include "avx_kernels.h"
 #include "cuda_kernels.cuh"
 #include "gl_utils.h"
+
+#ifdef WIN32
+#include <windows.h>
+extern "C" {
+__declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
+}
+#endif
 
 int main() {
 
@@ -61,18 +69,6 @@ int main() {
   CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&cudaPboResources[1], pboIds[1],
                                           cudaGraphicsMapFlagsWriteDiscard));
 
-  // cudaStream_t streams[2];
-  // CUDA_CHECK(cudaStreamCreate(&streams[0]));
-  // CUDA_CHECK(cudaStreamCreate(&streams[1]));
-
-  // unsigned char *h_cuda_buffers[2];
-  // cudaMallocHost(&h_cuda_buffers[0], dsize);
-  // cudaMallocHost(&h_cuda_buffers[1], dsize);
-
-  // unsigned char *d_cuda_buffers[2];
-  // cudaMalloc(&d_cuda_buffers[0], dsize);
-  // cudaMalloc(&d_cuda_buffers[1], dsize);
-
   unsigned int texture;
   glGenTextures(1, &texture);
   glBindTexture(GL_TEXTURE_2D, texture);
@@ -105,13 +101,17 @@ int main() {
                         (void *)(2 * sizeof(float)));
   glEnableVertexAttribArray(1);
 
-  Shader shader("src/shaders/shader.vs", "src/shaders/shader.fs");
+  Shader shader("shaders/shader.vs", "shaders/shader.fs");
   shader.use();
   shader.setInt("texture1", 0);
 
   double length = 0.7885;
   int buffer_index = 0;
   bool needs_texture_switch = false;
+  auto clock = std::chrono::high_resolution_clock();
+  auto start = clock.now();
+  int frames = 0;
+  glfwSwapInterval(0);
   while (!glfwWindowShouldClose(window)) {
     update_pan(state, window);
 
@@ -150,12 +150,21 @@ int main() {
       needs_texture_switch = true;
 
       redraw_image(window, shader, texture, VAO);
+      ++frames;
     } else if (needs_texture_switch) {
       int nextIndex = (buffer_index + 1) % 2;
       switch_texture(state, nextIndex, texture, pboIds);
       needs_texture_switch = false;
 
       redraw_image(window, shader, texture, VAO);
+      ++frames;
+    }
+    if (frames == 6283) {
+      auto end = clock.now();
+      const std::chrono::duration<double> diff = end - start;
+      std::cout << "fps: " << 6283 / diff.count() << std::endl;
+      frames = 0;
+      start = clock.now();
     }
 
     glfwPollEvents();

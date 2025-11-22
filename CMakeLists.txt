@@ -31,7 +31,6 @@ add_library(julia_lib
 
 target_include_directories(julia_lib PUBLIC
     vendor/glad/include
-    vendor/stb/include
     include
     ${CUDAToolkit_INCLUDE_DIRS}
 )
@@ -48,3 +47,10 @@ target_link_libraries(julia_lib PUBLIC
 add_executable(animated src/animated.cpp)
 target_link_libraries(animated PRIVATE julia_lib)
 set_property(TARGET animated PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+
+add_custom_command(TARGET animated POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/shaders
+        $<TARGET_FILE_DIR:animated>/shaders
+    COMMENT "Copying shaders to binary directory..."
+)
