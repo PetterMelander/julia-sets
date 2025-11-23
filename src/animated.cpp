@@ -6,7 +6,6 @@
 #include <GLFW/glfw3.h>
 #include <cuda_runtime.h>
 #include <cuda_gl_interop.h>
-#include <chrono>
 #include "shader.h"
 #include "avx_kernels.h"
 #include "cuda_kernels.cuh"

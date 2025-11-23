@@ -116,7 +116,7 @@ __m512d evaluate(__m512d z_re, __m512d z_im, __m512d c_re, __m512d c_im)
   return escape_iter;
 }
 
-void julia(unsigned char *colors, float range, float x_offset, float y_offset,
+void julia(unsigned char *intensities, float range, float x_offset, float y_offset,
            float c_re, float c_im, int width, int height)
 {
 
@@ -147,12 +147,12 @@ void julia(unsigned char *colors, float range, float x_offset, float y_offset,
 
       // evaluate pixels
       __m512 result_vec = evaluate(z_re_vec, z_im_vec, c_re_vec, c_im_vec);
-      _mm512_store_ps(colors + y * width + x, result_vec);
+      _mm512_store_ps(intensities + y * width + x, result_vec);
     }
   }
 }
 
-void julia(float *colors, double range, double x_offset, double y_offset,
+void julia(float *intensities, double range, double x_offset, double y_offset,
            double c_re, double c_im, int width, int height)
 {
 
@@ -185,7 +185,7 @@ void julia(float *colors, double range, double x_offset, double y_offset,
 
       // convert to float and store
       __m256 float_vec = _mm512_cvtpd_ps(result_vec);
-      _mm256_store_ps(colors + y * width + x, float_vec);
+      _mm256_store_ps(intensities + y * width + x, float_vec);
     }
   }
 }
