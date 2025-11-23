@@ -22,13 +22,15 @@ extern "C"
 
 int main()
 {
-
+  // set initial state
   ProgramState state;
-  state.width = 1024;
-  state.height = 1024;
-  state.c_re = 0.35;
-  state.c_im = 0.35;
+  state.width = 2048;
+  state.height = 2048;
 
+  // width must be multiple of 8 for avx kernel to work
+  state.width = (state.width + 7) / 8 * 8;
+
+  // init gl and window
   glfwInit();
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -50,6 +52,7 @@ int main()
     return -1;
   }
 
+  // set user input callbacks
   glfwSetWindowUserPointer(window, &state);
   glfwSetScrollCallback(window, scroll_callback);
   glfwSetMouseButtonCallback(window, mouse_button_callback);
@@ -59,11 +62,12 @@ int main()
   glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
   glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
+  // init cuda buffers & streams
+  // buffers are used for double precision color mapping
   int raw_dsize = state.width * state.height * sizeof(float);
-  cudaStream_t streams[3];
+  cudaStream_t streams[2];
   CUDA_CHECK(cudaStreamCreate(&streams[0]));
   CUDA_CHECK(cudaStreamCreate(&streams[1]));
-  CUDA_CHECK(cudaStreamCreate(&streams[2]));
 
   float *h_cuda_buffers[2];
   cudaMallocHost(&h_cuda_buffers[0], raw_dsize);
@@ -73,6 +77,8 @@ int main()
   cudaMalloc(&d_cuda_buffers[0], raw_dsize);
   cudaMalloc(&d_cuda_buffers[1], raw_dsize);
 
+  // init pixel buffers
+  // used directly for single precision
   GLuint pboIds[2];
   int dsize = sizeof(unsigned char) * state.width * state.height * 3;
   glGenBuffers(2, pboIds);
@@ -87,11 +93,12 @@ int main()
   CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&cudaPboResources[1], pboIds[1],
                                           cudaGraphicsMapFlagsWriteDiscard));
 
+  // init texture and vao to draw on
   unsigned int texture;
   glGenTextures(1, &texture);
   glBindTexture(GL_TEXTURE_2D, texture);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, state.width, state.height, 0, GL_RGB,
                GL_UNSIGNED_BYTE, 0);
 
@@ -110,8 +117,7 @@ int main()
   unsigned int EBO;
   glGenBuffers(1, &EBO);
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-  glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices,
-               GL_STATIC_DRAW);
+  glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
 
   glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)0);
   glEnableVertexAttribArray(0);
@@ -119,93 +125,69 @@ int main()
                         (void *)(2 * sizeof(float)));
   glEnableVertexAttribArray(1);
 
+  // init shaders
   Shader shader("shaders/shader.vs", "shaders/shader.fs");
   shader.use();
   shader.setInt("texture1", 0);
 
-  double length = 0.7885;
-  int buffer_index = 0;
+  // main render loop
+  int bufIdx = 0;
   bool needs_texture_switch = false;
-  auto clock = std::chrono::high_resolution_clock();
-  auto start = clock.now();
-  int frames = 0;
-  // glfwSwapInterval(0);
+  glfwSwapInterval(2);
   while (!glfwWindowShouldClose(window))
   {
     update_pan(state, window);
-
-    process_fractal_update(state, window);
+    update_theta(state, window);
 
     if (state.needs_redraw)
     {
-      // state.c_re = length * cos(state.theta);
-      // state.c_im = length * sin(state.theta);
-      state.c_re = 1.5 * sin(sqrt(2)*state.theta + M_PI/2.0);
-      state.c_im = 1.5 * sin(state.theta);
+      // compute next fractal and display previously computed fractal
+      state.c_re = sin(sqrt(2) * state.theta + M_PI / 2.0);
+      state.c_im = sin(state.theta);
 
-      buffer_index = (buffer_index + 1) % 2;
-      int nextIndex = (buffer_index + 1) % 2;
+      bufIdx = (bufIdx + 1) % 2;
+      int nextIdx = (bufIdx + 1) % 2;
 
-      if (state.zoomLevel < -1) {
-        unsigned char *d_buffer = nullptr;
-        CUDA_CHECK(
-            cudaGraphicsMapResources(1, &cudaPboResources[nextIndex], 0));
-        CUDA_CHECK(cudaGraphicsResourceGetMappedPointer(
-            (void **)&d_buffer, nullptr, cudaPboResources[nextIndex]));
-        compute_julia_cuda(state, d_buffer);
-        CUDA_CHECK(
-            cudaGraphicsUnmapResources(1, &cudaPboResources[nextIndex], 0));
+      if (state.zoomLevel < 10000)
+      {
+        compute_julia_sp(state, cudaPboResources[nextIdx], streams[nextIdx]);
       }
       else
       {
-        compute_julia_avx(state, h_cuda_buffers[nextIndex]);
-        cudaMemcpyAsync(d_cuda_buffers[nextIndex], h_cuda_buffers[nextIndex],
-                        raw_dsize, cudaMemcpyHostToDevice, streams[nextIndex]);
-
-        unsigned char *d_buffer = nullptr;
-        CUDA_CHECK(cudaGraphicsMapResources(1, &cudaPboResources[nextIndex],
-                                            streams[2])); // TODO: decide on stream and placement
-        CUDA_CHECK(cudaGraphicsResourceGetMappedPointer(
-            (void **)&d_buffer, nullptr, cudaPboResources[nextIndex]));
-
-        map_colors_cuda(d_buffer, d_cuda_buffers[nextIndex],
-                        state.width * state.height, streams[nextIndex]);
-        CUDA_CHECK(cudaGraphicsUnmapResources(1, &cudaPboResources[nextIndex],
-                                              streams[nextIndex]));
+        compute_julia_dp(state, h_cuda_buffers[nextIdx], d_cuda_buffers[nextIdx],
+                         cudaPboResources[nextIdx], streams[nextIdx]);
       }
       glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
 
-      CUDA_CHECK(cudaStreamSynchronize(streams[buffer_index]));
-      switch_texture(state, buffer_index, texture, pboIds);
+      // make sure previous fractal is finished before rendering
+      CUDA_CHECK(cudaStreamSynchronize(streams[bufIdx]));
+      switch_texture(state, bufIdx, texture, pboIds);
+      redraw_image(window, shader, texture, VAO);
 
       state.needs_redraw = false;
       needs_texture_switch = true;
-
-      redraw_image(window, shader, texture, VAO);
-      ++frames;
     }
     else if (needs_texture_switch)
     {
-      int nextIndex = (buffer_index + 1) % 2;
-      CUDA_CHECK(cudaStreamSynchronize(streams[buffer_index]));
-      switch_texture(state, nextIndex, texture, pboIds);
+      // if we just paused, render last computed fractal, then stop
+      int nextIdx = (bufIdx + 1) % 2;
+
+      // make sure previous fractal is finished before rendering
+      CUDA_CHECK(cudaStreamSynchronize(streams[bufIdx]));
+      switch_texture(state, nextIdx, texture, pboIds);
+      redraw_image(window, shader, texture, VAO);
 
       needs_texture_switch = false;
-
-      redraw_image(window, shader, texture, VAO);
-      ++frames;
-    }
-    if (frames == 6283)
-    {
-      auto end = clock.now();
-      const std::chrono::duration<double> diff = end - start;
-      std::cout << "fps: " << 6283 / diff.count() << std::endl;
-      frames = 0;
-      start = clock.now();
     }
 
     glfwPollEvents();
   }
   glfwTerminate();
+
+  cudaFree(d_cuda_buffers[0]);
+  cudaFree(d_cuda_buffers[1]);
+  cudaFreeHost(h_cuda_buffers[0]);
+  cudaFreeHost(h_cuda_buffers[1]);
+
   return 0;
 }

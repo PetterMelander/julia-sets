@@ -4,8 +4,6 @@
 #include "gl_utils.h"
 #include "avx_kernels.h"
 
-// TODO: handle image sizes not multiples of 16
-
 constexpr int MAX_ITERS = 1000;
 constexpr float R_s = 2.0f;
 constexpr double R_d = 2.0;
@@ -184,14 +182,15 @@ void julia(float *colors, double range, double x_offset, double y_offset,
 
       // evaluate pixels
       __m512d result_vec = evaluate(z_re_vec, z_im_vec, c_re_vec, c_im_vec);
+
+      // convert to float and store
       __m256 float_vec = _mm512_cvtpd_ps(result_vec);
       _mm256_store_ps(colors + y * width + x, float_vec);
     }
   }
 }
 
-void compute_julia_avx(ProgramState state,
-                       float *buffer)
+void compute_julia_avx(ProgramState state, float *buffer)
 {
   julia(buffer, 1.0 / state.zoomLevel, state.x_offset, state.y_offset,
         state.c_re, state.c_im, state.width, state.height);

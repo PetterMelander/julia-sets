@@ -31,19 +31,20 @@ __device__ float evaluate(float2 z, const float2 c)
   return MAX_ITERS;
 }
 
-__device__ uchar3 map_color(float intensity) {
-    uchar3 rgb = {0, 0, 0};
-    if (intensity < MAX_ITERS) {
-      rgb.x = (unsigned char)(__sinf(intensity * 0.05f + 5.423f) * 127 + 128);
-      rgb.y = (unsigned char)(__sinf(intensity * 0.05f + 4.359f) * 127 + 128);
-      rgb.z = (unsigned char)(__sinf(intensity * 0.05f + 1.150f) * 127 + 128);
-    }
-    return rgb;
+__device__ uchar3 map_color(float intensity)
+{
+  uchar3 rgb = {0, 0, 0};
+  if (intensity < MAX_ITERS)
+  {
+    rgb.x = (unsigned char)(__sinf(intensity * 0.05f + 5.423f) * 127 + 128);
+    rgb.y = (unsigned char)(__sinf(intensity * 0.05f + 4.359f) * 127 + 128);
+    rgb.z = (unsigned char)(__sinf(intensity * 0.05f + 1.150f) * 127 + 128);
+  }
+  return rgb;
 }
 
-__global__ void julia(uchar3 *const buffer, const float range,
-                      const float2 offsets, const float2 c, const int width,
-                      const int height)
+__global__ void julia(uchar3 *const buffer, const float range, const float2 offsets,
+                      const float2 c, const int width, const int height)
 {
   int x_idx = blockIdx.x * blockDim.x + threadIdx.x;
   int y_idx = blockIdx.y * blockDim.y + threadIdx.y;
@@ -71,7 +72,7 @@ __global__ void map_colors(uchar3 *__restrict__ buffer, const float *__restrict_
   }
 }
 
-void compute_julia_cuda(ProgramState state, unsigned char *buffer)
+void compute_julia_cuda(ProgramState state, unsigned char *buffer, cudaStream_t stream)
 {
   float2 c = make_float2(state.c_re, state.c_im);
   float2 offsets = make_float2(state.x_offset, state.y_offset);
@@ -80,8 +81,8 @@ void compute_julia_cuda(ProgramState state, unsigned char *buffer)
   unsigned int n_blocks = (state.width + BLOCK_SIZE_2D - 1) / BLOCK_SIZE_2D;
   dim3 block_dims{BLOCK_SIZE_2D, BLOCK_SIZE_2D};
   dim3 grid_dims{n_blocks, n_blocks};
-  julia<<<grid_dims, block_dims>>>(buffer_ptr, (float)(1.0 / state.zoomLevel),
-                                   offsets, c, state.width, state.height);
+  julia<<<grid_dims, block_dims, 0, stream>>>(buffer_ptr, (float)(1.0 / state.zoomLevel),
+                                              offsets, c, state.width, state.height);
   CUDA_CHECK(cudaGetLastError());
 }
 

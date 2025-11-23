@@ -1,5 +1,7 @@
 #include "gl_utils.h"
 #include "shader.h"
+#include "cuda_kernels.cuh"
+#include "avx_kernels.h"
 
 void framebuffer_size_callback(GLFWwindow *window, int width, int height)
 {
@@ -85,7 +87,7 @@ void update_pan(ProgramState &state, GLFWwindow *window)
   }
 }
 
-void process_fractal_update(ProgramState &state, GLFWwindow *window)
+void update_theta(ProgramState &state, GLFWwindow *window)
 {
   if (!state.paused)
   {
@@ -126,4 +128,30 @@ void switch_texture(ProgramState &state, int index, unsigned int texture,
   glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pboIds[index]);
   glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, state.width, state.height, GL_RGB,
                   GL_UNSIGNED_BYTE, 0);
+}
+
+void compute_julia_sp(ProgramState &state, cudaGraphicsResource *cudaPboResource, cudaStream_t stream)
+{
+  unsigned char *d_buffer = nullptr;
+  CUDA_CHECK(cudaGraphicsMapResources(1, &cudaPboResource, 0));
+  CUDA_CHECK(cudaGraphicsResourceGetMappedPointer(
+      (void **)&d_buffer, nullptr, cudaPboResource));
+  compute_julia_cuda(state, d_buffer, stream);
+  CUDA_CHECK(cudaGraphicsUnmapResources(1, &cudaPboResource, stream));
+}
+
+void compute_julia_dp(ProgramState &state, float *h_cuda_buffer, float *d_cuda_buffer,
+                      cudaGraphicsResource *cudaPboResource, cudaStream_t stream)
+{
+  compute_julia_avx(state, h_cuda_buffer);
+  cudaMemcpyAsync(d_cuda_buffer, h_cuda_buffer, state.width * state.height * sizeof(float),
+                  cudaMemcpyHostToDevice, stream);
+
+  CUDA_CHECK(cudaGraphicsMapResources(1, &cudaPboResource, 0));
+  unsigned char *d_buffer = nullptr;
+  CUDA_CHECK(cudaGraphicsResourceGetMappedPointer(
+      (void **)&d_buffer, nullptr, cudaPboResource));
+
+  map_colors_cuda(d_buffer, d_cuda_buffer, state.width * state.height, stream);
+  CUDA_CHECK(cudaGraphicsUnmapResources(1, &cudaPboResource, stream));
 }
