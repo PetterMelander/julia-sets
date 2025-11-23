@@ -1,9 +1,11 @@
 #pragma once
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
+#include <cuda_gl_interop.h>
 #include "shader.h"
 
-struct ProgramState {
+struct ProgramState
+{
   double c_re = 0.0;
   double c_im = 0.0;
   double theta = 0.0;
@@ -23,13 +25,12 @@ struct ProgramState {
 
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 void scroll_callback(GLFWwindow *window, double xoffset, double yoffset);
-void mouse_button_callback(GLFWwindow *window, int button, int action,
-                           int mods);
-void key_callback(GLFWwindow *window, int key, int scancode, int action,
-                  int mods);
+void mouse_button_callback(GLFWwindow *window, int button, int action, int mods);
+void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods);
 void update_pan(ProgramState &state, GLFWwindow *window);
-void process_fractal_update(ProgramState &state, GLFWwindow *window);
-void redraw_image(GLFWwindow *window, Shader shader, unsigned int texture,
-                  unsigned int VAO);
-void switch_texture(ProgramState &state, int index, unsigned int texture,
-                    GLuint *pboIds);
+void update_theta(ProgramState &state, GLFWwindow *window);
+void redraw_image(GLFWwindow *window, Shader shader, unsigned int texture, unsigned int VAO);
+void switch_texture(ProgramState &state, int index, unsigned int texture, GLuint *pboIds);
+void compute_julia_sp(ProgramState &state, cudaGraphicsResource *cudaPboResource, cudaStream_t stream);
+void compute_julia_dp(ProgramState &state, float *h_cuda_buffer, float *d_cuda_buffer,
+                      cudaGraphicsResource *cudaPboResource, cudaStream_t stream);
