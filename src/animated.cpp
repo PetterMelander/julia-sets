@@ -24,8 +24,8 @@ int main()
 {
   // set initial state
   ProgramState state;
-  state.width = 2048;
-  state.height = 2048;
+  state.width = 512;
+  state.height = 512;
 
   // width must be multiple of 8 for avx kernel to work
   state.width = (state.width + 7) / 8 * 8;
@@ -133,7 +133,10 @@ int main()
   // main render loop
   int bufIdx = 0;
   bool needs_texture_switch = false;
-  glfwSwapInterval(2);
+  glfwSwapInterval(0);
+  double R = sqrt(3.0);
+  double r = 2.2;
+  double d = 0.3;
   while (!glfwWindowShouldClose(window))
   {
     update_pan(state, window);
@@ -142,8 +145,9 @@ int main()
     if (state.needs_redraw)
     {
       // compute next fractal and display previously computed fractal
-      state.c_re = sin(sqrt(2) * state.theta + M_PI / 2.0);
-      state.c_im = sin(state.theta);
+      state.c_re = (R - r) * cos(state.theta) + d * cos((R - r) * state.theta / r);
+      state.c_im = (R - r) * sin(state.theta) - d * sin((R - r) * state.theta / r);
+
 
       bufIdx = (bufIdx + 1) % 2;
       int nextIdx = (bufIdx + 1) % 2;
