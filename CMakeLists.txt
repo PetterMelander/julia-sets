@@ -56,7 +56,7 @@ add_custom_command(TARGET animated POST_BUILD
 )
 
 add_executable(3d src/3d.cpp)
-target_link_libraries(3d PRIVATE julia_lib)
+target_link_libraries(3d PRIVATE julia_lib glm)
 set_property(TARGET 3d PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
 
 add_custom_command(TARGET 3d POST_BUILD

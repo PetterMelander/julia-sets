@@ -1,6 +1,7 @@
 #version 330 core
 layout (location = 0) in vec2 aPos;
 
+uniform mat4 lookAt;
 uniform sampler2D heightMap;
 out float vIntensity;
 
@@ -12,16 +13,8 @@ void main()
 
     float h = texture(heightMap, uv).r;
 
-    float zoom = 1.0;
-    float angle = -1.0; 
+    vec4 pos = vec4(aPos.x, h, aPos.y, 1.0);
 
-    vec3 pos = vec3(aPos.x, h, aPos.y);
-
-    float c = cos(angle);
-    float s = sin(angle);
-    float newY = pos.y * c - pos.z * s;
-    float newZ = pos.y * s + pos.z * c;
-
-    gl_Position = vec4(pos.x * zoom, newY * zoom, newZ * zoom, 1.0);
+    gl_Position = lookAt * pos;
     vIntensity = h;
 }

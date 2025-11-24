@@ -3,8 +3,14 @@
 #include <execution>
 #include <cmath>
 #include <cstddef>
+
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
+
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+
 #include "shader.h"
 #include "avx_kernels.h"
 #include "gl_utils.h"
@@ -177,12 +183,23 @@ int main()
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, width, height, 0, GL_RED, GL_FLOAT, intensities.data());
 
+  glm::mat4 model = glm::mat4(1.0f);
+  model = glm::scale(model, glm::vec3(1.0/sqrt(2.0), 1.0, 1.0/sqrt(2.0)));
+  glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)state.width / (float)state.height, 0.1f, 100.0f);
+
   // main render loop
   while (!glfwWindowShouldClose(window))
   {
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     shader.use();
+
+    glm::mat4 view = glm::mat4(1.0f);
+    float radius = 1.5f;
+    float camX = static_cast<float>(sin(glfwGetTime() * 0.5) * radius);
+    float camZ = static_cast<float>(cos(glfwGetTime() * 0.5) * radius);
+    view = glm::lookAt(glm::vec3(camX, 1.0f, camZ), glm::vec3(0.0f, 0.2f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    shader.setMat4("lookAt", projection * view * model);
 
     glBindVertexArray(VAO);
     glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
