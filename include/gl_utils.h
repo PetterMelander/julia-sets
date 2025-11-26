@@ -1,8 +1,12 @@
 #pragma once
+
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
+
 #include <cuda_gl_interop.h>
+
 #include "shader.h"
+#include "camera.h"
 
 struct ProgramState
 {
@@ -21,16 +25,22 @@ struct ProgramState
   double last_mouse_y = 0.0;
   bool needs_redraw = true;
   bool paused = false;
+
+  Camera camera;
+  bool first_mouse = false;
 };
 
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
-void scroll_callback(GLFWwindow *window, double xoffset, double yoffset);
+void mouse_callback(GLFWwindow* window, double xposIn, double yposIn);
 void mouse_button_callback(GLFWwindow *window, int button, int action, int mods);
+void scroll_callback(GLFWwindow *window, double xoffset, double yoffset);
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods);
 void update_pan(ProgramState &state, GLFWwindow *window);
+void process_movement(GLFWwindow *window, float deltaTime);
 void update_theta(ProgramState &state, GLFWwindow *window);
-void redraw_image(GLFWwindow *window, Shader shader, unsigned int texture, unsigned int VAO);
+void redraw_image(GLFWwindow *window, Shader &shader, unsigned int texture, unsigned int VAO);
 void switch_texture(ProgramState &state, int index, unsigned int texture, GLuint *pboIds);
-void compute_julia_sp(ProgramState &state, cudaGraphicsResource *cudaPboResource, cudaStream_t stream);
+void compute_julia_sp(ProgramState &state, float *d_raw_buffer, cudaGraphicsResource *cudaPboColor,
+                      cudaGraphicsResource *cudaPboSmoothed, cudaStream_t stream);
 void compute_julia_dp(ProgramState &state, float *h_cuda_buffer, float *d_cuda_buffer,
                       cudaGraphicsResource *cudaPboResource, cudaStream_t stream);

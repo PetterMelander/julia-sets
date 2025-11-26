@@ -23,8 +23,8 @@ int main()
 {
   // set initial state
   ProgramState state;
-  state.width = 512;
-  state.height = 512;
+  state.width = 2048;
+  state.height = 2048;
 
   // width must be multiple of 8 for avx kernel to work
   state.width = (state.width + 7) / 8 * 8;
@@ -53,6 +53,7 @@ int main()
 
   // set user input callbacks
   glfwSetWindowUserPointer(window, &state);
+  glfwSetCursorPosCallback(window, mouse_callback);
   glfwSetScrollCallback(window, scroll_callback);
   glfwSetMouseButtonCallback(window, mouse_button_callback);
   glfwSetKeyCallback(window, key_callback);
@@ -76,47 +77,63 @@ int main()
   cudaMalloc(&d_cuda_buffers[0], raw_dsize);
   cudaMalloc(&d_cuda_buffers[1], raw_dsize);
 
-  // init pixel buffers
+  // init pixel buffers for 2d
   // used directly for single precision
-  GLuint pboIds[2];
+  GLuint colorPboIds[2];
   int dsize = sizeof(unsigned char) * state.width * state.height * 3;
-  glGenBuffers(2, pboIds);
-  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pboIds[0]);
+  glGenBuffers(2, colorPboIds);
+  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, colorPboIds[0]);
   glBufferData(GL_PIXEL_UNPACK_BUFFER, dsize, 0, GL_DYNAMIC_DRAW);
-  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pboIds[1]);
+  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, colorPboIds[1]);
   glBufferData(GL_PIXEL_UNPACK_BUFFER, dsize, 0, GL_DYNAMIC_DRAW);
 
-  cudaGraphicsResource *cudaPboResources[2];
-  CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&cudaPboResources[0], pboIds[0],
+  cudaGraphicsResource *colorCudaPboResources[2];
+  CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&colorCudaPboResources[0], colorPboIds[0],
                                           cudaGraphicsMapFlagsWriteDiscard));
-  CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&cudaPboResources[1], pboIds[1],
+  CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&colorCudaPboResources[1], colorPboIds[1],
+                                          cudaGraphicsMapFlagsWriteDiscard));
+
+  // init pixel buffers for 3d
+  // used directly for single precision
+  GLuint smoothPboIds[2];
+  dsize = sizeof(float) * state.width * state.height;
+  glGenBuffers(2, smoothPboIds);
+  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, smoothPboIds[0]);
+  glBufferData(GL_PIXEL_UNPACK_BUFFER, dsize, 0, GL_DYNAMIC_DRAW);
+  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, smoothPboIds[1]);
+  glBufferData(GL_PIXEL_UNPACK_BUFFER, dsize, 0, GL_DYNAMIC_DRAW);
+
+  cudaGraphicsResource *smoothCudaPboResources[2];
+  CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&smoothCudaPboResources[0], smoothPboIds[0],
+                                          cudaGraphicsMapFlagsWriteDiscard));
+  CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&smoothCudaPboResources[1], smoothPboIds[1],
                                           cudaGraphicsMapFlagsWriteDiscard));
 
   // init texture and vao to draw on
-  unsigned int texture;
-  glGenTextures(1, &texture);
-  glBindTexture(GL_TEXTURE_2D, texture);
+  unsigned int texture_2d;
+  glGenTextures(1, &texture_2d);
+  glBindTexture(GL_TEXTURE_2D, texture_2d);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, state.width, state.height, 0, GL_RGB,
                GL_UNSIGNED_BYTE, 0);
 
-  unsigned int VAO;
-  glGenVertexArrays(1, &VAO);
-  glBindVertexArray(VAO);
+  unsigned int VAO_2d;
+  glGenVertexArrays(1, &VAO_2d);
+  glBindVertexArray(VAO_2d);
 
-  float vertices[] = {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, -1.0f, 1.0f, 0.0f,
-                      -1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 1.0f, 0.0f, 1.0f};
-  unsigned int VBO;
-  glGenBuffers(1, &VBO);
-  glBindBuffer(GL_ARRAY_BUFFER, VBO);
-  glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+  float vertices_2d[] = {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, -1.0f, 1.0f, 0.0f,
+                         -1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 1.0f, 0.0f, 1.0f};
+  unsigned int VBO_2d;
+  glGenBuffers(1, &VBO_2d);
+  glBindBuffer(GL_ARRAY_BUFFER, VBO_2d);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(vertices_2d), vertices_2d, GL_STATIC_DRAW);
 
-  unsigned int indices[] = {0, 1, 3, 1, 2, 3};
-  unsigned int EBO;
-  glGenBuffers(1, &EBO);
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-  glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+  unsigned int indices_2d[] = {0, 1, 3, 1, 2, 3};
+  unsigned int EBO_2d;
+  glGenBuffers(1, &EBO_2d);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO_2d);
+  glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices_2d), indices_2d, GL_STATIC_DRAW);
 
   glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)0);
   glEnableVertexAttribArray(0);
@@ -125,17 +142,79 @@ int main()
   glEnableVertexAttribArray(1);
 
   // init shaders
-  Shader shader("shaders/shader.vs", "shaders/shader.fs");
-  shader.use();
-  shader.setInt("texture1", 0);
+  Shader shader_2d("shaders/shader.vs", "shaders/shader.fs");
+  shader_2d.use();
+  shader_2d.setInt("texture1", 0);
+
+  std::vector<float> vertices_3d;
+  vertices_3d.reserve(2 * state.width * state.height);
+  std::vector<unsigned int> indices_3d;
+  indices_3d.reserve(3 * 2 * (state.width - 1) * (state.height - 1));
+  for (int y = 0; y < state.height; ++y)
+  {
+    for (int x = 0; x < state.width; ++x)
+    {
+      vertices_3d.push_back((float)x / (state.width - 1) * 2 - 1);
+      vertices_3d.push_back((float)y / (state.height - 1) * 2 - 1);
+
+      if (x < state.width - 1 && y < state.height - 1)
+      {
+        unsigned int i = y * state.width + x;
+        indices_3d.push_back(i);
+        indices_3d.push_back(i + 1);
+        indices_3d.push_back(i + state.width + 1);
+
+        indices_3d.push_back(i);
+        indices_3d.push_back(i + state.width + 1);
+        indices_3d.push_back(i + state.width);
+      }
+    }
+  }
+
+  unsigned int VAO_3d;
+  glGenVertexArrays(1, &VAO_3d);
+  glBindVertexArray(VAO_3d);
+
+  unsigned int VBO_3d;
+  glGenBuffers(1, &VBO_3d);
+  glBindBuffer(GL_ARRAY_BUFFER, VBO_3d);
+  glBufferData(GL_ARRAY_BUFFER, vertices_3d.size() * sizeof(float), vertices_3d.data(), GL_STATIC_DRAW);
+
+  unsigned int EBO_3d;
+  glGenBuffers(1, &EBO_3d);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO_3d);
+  glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices_3d.size() * sizeof(unsigned int), indices_3d.data(), GL_STATIC_DRAW);
+
+  glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void *)0);
+  glEnableVertexAttribArray(0);
+
+  unsigned int texture_3d;
+  glGenTextures(1, &texture_3d);
+  glBindTexture(GL_TEXTURE_2D, texture_3d);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, state.width, state.height, 0, GL_RED, GL_FLOAT, NULL);
+
+  // init shaders
+  Shader shader_3d("shaders/shader_3d.vs", "shaders/shader_3d.fs");
+  shader_3d.use();
+  shader_3d.setInt("texture2", 1);
+
+  glEnable(GL_DEPTH_TEST);
 
   // main render loop
   int bufIdx = 0;
   bool needs_texture_switch = false;
-  glfwSwapInterval(0);
+  // glfwSwapInterval(0);
   double R = sqrt(3.0);
   double r = 2.2;
   double d = 0.3;
+
+  glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)state.width / (float)state.height, 0.1f, 100.0f);
+  glm::mat4 view = state.camera.GetViewMatrix();
+
   while (!glfwWindowShouldClose(window))
   {
     update_pan(state, window);
@@ -147,25 +226,32 @@ int main()
       state.c_re = (R - r) * cos(state.theta) + d * cos((R - r) * state.theta / r);
       state.c_im = (R - r) * sin(state.theta) - d * sin((R - r) * state.theta / r);
 
-
       bufIdx = (bufIdx + 1) % 2;
       int nextIdx = (bufIdx + 1) % 2;
 
       if (state.zoomLevel < 10000)
       {
-        compute_julia_sp(state, cudaPboResources[nextIdx], streams[nextIdx]);
+        compute_julia_sp(
+            state, d_cuda_buffers[nextIdx],
+            colorCudaPboResources[nextIdx],
+            smoothCudaPboResources[nextIdx],
+            streams[nextIdx]);
       }
       else
       {
         compute_julia_dp(state, h_cuda_buffers[nextIdx], d_cuda_buffers[nextIdx],
-                         cudaPboResources[nextIdx], streams[nextIdx]);
+                         colorCudaPboResources[nextIdx], streams[nextIdx]);
       }
       glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
 
       // make sure previous fractal is finished before rendering
       CUDA_CHECK(cudaStreamSynchronize(streams[bufIdx]));
-      switch_texture(state, bufIdx, texture, pboIds);
-      redraw_image(window, shader, texture, VAO);
+
+      view = state.camera.GetViewMatrix();
+      shader_3d.setMat4("lookAt", projection * view);
+
+      switch_texture(state, bufIdx, texture_3d, smoothPboIds);
+      redraw_image(window, shader_3d, texture_3d, VAO_3d);
 
       state.needs_redraw = false;
       needs_texture_switch = true;
@@ -177,8 +263,12 @@ int main()
 
       // make sure previous fractal is finished before rendering
       CUDA_CHECK(cudaStreamSynchronize(streams[bufIdx]));
-      switch_texture(state, nextIdx, texture, pboIds);
-      redraw_image(window, shader, texture, VAO);
+
+      view = state.camera.GetViewMatrix();
+      shader_3d.setMat4("lookAt", projection * view);
+
+      switch_texture(state, nextIdx, texture_3d, smoothPboIds);
+      redraw_image(window, shader_3d, texture_3d, VAO_3d);
 
       needs_texture_switch = false;
     }
