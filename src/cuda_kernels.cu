@@ -56,7 +56,7 @@ __global__ void julia(float *const __restrict__ buffer, const float range, const
     float2 z{re, im};
 
     float intensity = evaluate(z, c);
-    buffer[y_idx * width + x_idx] = intensity * 0.002f;
+    buffer[y_idx * width + x_idx] = intensity;
   }
 }
 

@@ -15,20 +15,8 @@ void mouse_callback(GLFWwindow *window, double xposIn, double yposIn)
   ProgramState *state =
       static_cast<ProgramState *>(glfwGetWindowUserPointer(window));
 
-  if (state->first_mouse)
-  {
-    state->last_mouse_x = xposIn;
-    state->last_mouse_y = yposIn;
-    state->first_mouse = false;
-  }
-
-  float xoffset = xposIn - state->last_mouse_x;
-  float yoffset = state->last_mouse_y - yposIn;
-
   state->last_mouse_x = xposIn;
   state->last_mouse_y = yposIn;
-
-  state->camera.ProcessMouseMovement(xoffset, yoffset);
 }
 
 void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
@@ -36,26 +24,24 @@ void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
   ProgramState *state =
       static_cast<ProgramState *>(glfwGetWindowUserPointer(window));
 
-  // double oldZoom = state->zoomLevel;
-  // if (yoffset > 0)
-  // {
-  //   state->zoomLevel *= 1.1;
-  // }
-  // else
-  // {
-  //   state->zoomLevel /= 1.1;
-  // }
+  double oldZoom = state->zoomLevel;
+  if (yoffset > 0)
+  {
+    state->zoomLevel *= 1.1;
+  }
+  else
+  {
+    state->zoomLevel /= 1.1;
+  }
 
-  // double xPos, yPos;
-  // glfwGetCursorPos(window, &xPos, &yPos);
-  // state->x_offset -=
-  //     (1.0 - 1.0 / 1.1) * (xPos / state->width - 0.5) * 2.0 / oldZoom;
-  // state->y_offset +=
-  //     (1.0 - 1.0 / 1.1) * (yPos / state->height - 0.5) * 2.0 / oldZoom;
+  double xPos, yPos;
+  glfwGetCursorPos(window, &xPos, &yPos);
+  state->x_offset -=
+      (1.0 - 1.0 / 1.1) * (xPos / state->width - 0.5) * 2.0 / oldZoom;
+  state->y_offset +=
+      (1.0 - 1.0 / 1.1) * (yPos / state->height - 0.5) * 2.0 / oldZoom;
 
-  // state->needs_redraw = true;
-
-  state->camera.ProcessMouseScroll(static_cast<float>(yoffset));
+  state->needs_redraw = true;
 }
 
 void mouse_button_callback(GLFWwindow *window, int button, int action,
@@ -101,10 +87,8 @@ void update_pan(ProgramState &state, GLFWwindow *window)
   {
     double xPos, yPos;
     glfwGetCursorPos(window, &xPos, &yPos);
-    state.x_offset -=
-        (state.last_mouse_x - xPos) / state.width / state.zoomLevel * 2;
-    state.y_offset +=
-        (state.last_mouse_y - yPos) / state.height / state.zoomLevel * 2;
+    state.x_offset -= (state.last_mouse_x - xPos) / state.width / state.zoomLevel * 2;
+    state.y_offset += (state.last_mouse_y - yPos) / state.height / state.zoomLevel * 2;
 
     state.last_mouse_x = xPos;
     state.last_mouse_y = yPos;
@@ -133,6 +117,28 @@ void update_theta(ProgramState &state, GLFWwindow *window)
 
 void redraw_image(GLFWwindow *window, Shader &shader, unsigned int texture, unsigned int VAO)
 {
+  glClear(GL_COLOR_BUFFER_BIT);
+  shader.use();
+
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, texture);
+
+  glBindVertexArray(VAO);
+  glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+
+  glfwSwapBuffers(window);
+}
+
+void switch_texture(ProgramState &state, int index, unsigned int texture, GLuint *pboIds)
+{
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, texture);
+  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pboIds[index]);
+  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, state.width, state.height, GL_RED, GL_FLOAT, 0);
+}
+
+void redraw_image_3d(GLFWwindow *window, Shader &shader, unsigned int texture, unsigned int VAO)
+{
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   shader.use();
 
@@ -141,58 +147,61 @@ void redraw_image(GLFWwindow *window, Shader &shader, unsigned int texture, unsi
 
   glBindVertexArray(VAO);
   glDrawElements(GL_TRIANGLES, 3 * 2 * (2048 - 1) * (2048 - 1), GL_UNSIGNED_INT, 0);
+  // glDrawArrays(GL_POINTS, 0, 2048 * 2048);
 
   glfwSwapBuffers(window);
 }
 
-void switch_texture(ProgramState &state, int index, unsigned int texture,
-                    GLuint *pboIds)
+void switch_texture_3d(ProgramState &state, int index, unsigned int texture, GLuint *pboIds)
 {
   glActiveTexture(GL_TEXTURE1);
   glBindTexture(GL_TEXTURE_2D, texture);
   glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pboIds[index]);
-  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, state.width, state.height, GL_RED,
-                  GL_FLOAT, 0);
+  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, state.width, state.height, GL_RED, GL_FLOAT, 0);
 }
 
-void compute_julia_sp(ProgramState &state, float *d_raw_buffer, cudaGraphicsResource *cudaPboColor,
+void compute_julia_sp(ProgramState &state, cudaGraphicsResource *cudaPboColor,
                       cudaGraphicsResource *cudaPboSmoothed, cudaStream_t stream)
 {
-  // compute base Julia set
-  compute_julia_cuda(state, d_raw_buffer, stream);
-
-  // map colors for 2d
-  // todo: pass original array directly to opengl and map colors in fragment shader
-  // todo: remove manual buffers and work directly in opengl buffers
-  unsigned char *d_color_buffer = nullptr;
+  float *d_color_buffer = nullptr;
   CUDA_CHECK(cudaGraphicsMapResources(1, &cudaPboColor, 0));
-  CUDA_CHECK(cudaGraphicsResourceGetMappedPointer(
-      (void **)&d_color_buffer, nullptr, cudaPboColor));
+  CUDA_CHECK(cudaGraphicsResourceGetMappedPointer((void **)&d_color_buffer, nullptr, cudaPboColor));
 
-  map_colors_cuda(d_color_buffer, d_raw_buffer, state.width * state.height, stream);
-  CUDA_CHECK(cudaGraphicsUnmapResources(1, &cudaPboColor, stream));
-
-  // smooth for 3d
   float *d_smoothed_buffer = nullptr;
   CUDA_CHECK(cudaGraphicsMapResources(1, &cudaPboSmoothed, 0));
-  CUDA_CHECK(cudaGraphicsResourceGetMappedPointer(
-      (void **)&d_smoothed_buffer, nullptr, cudaPboSmoothed));
+  CUDA_CHECK(cudaGraphicsResourceGetMappedPointer((void **)&d_smoothed_buffer, nullptr, cudaPboSmoothed));
 
+  compute_julia_cuda(state, d_color_buffer, stream);
+
+  // smooth for 3d
   NppiSize size = {state.width, state.height};
   NppStreamContext ctx;
   ctx.hStream = stream;
-  nppiFilterBoxBorder_32f_C1R_Ctx(
-      d_raw_buffer,
-      sizeof(float) * state.width,
-      size,
-      NppiPoint{0, 0},
-      d_smoothed_buffer,
-      sizeof(float) * state.width,
-      size,
-      NppiSize{11, 11},
-      NppiPoint{5, 5},
-      NPP_BORDER_REPLICATE,
-      ctx);
+  nppiFilterGaussBorder_32f_C1R_Ctx(
+    d_color_buffer,
+    sizeof(float) * state.width,
+    size,
+    NppiPoint{0, 0},
+    d_smoothed_buffer,
+    sizeof(float) * state.width,
+    size,
+    NPP_MASK_SIZE_9_X_9,
+    NPP_BORDER_REPLICATE,
+    ctx
+  );
+  // nppiFilterBoxBorder_32f_C1R_Ctx(
+  //     d_color_buffer,
+  //     sizeof(float) * state.width,
+  //     size,
+  //     NppiPoint{0, 0},
+  //     d_smoothed_buffer,
+  //     sizeof(float) * state.width,
+  //     size,
+  //     NppiSize{15, 15},
+  //     NppiPoint{7, 7},
+  //     NPP_BORDER_REPLICATE,
+  //     ctx);
+  CUDA_CHECK(cudaGraphicsUnmapResources(1, &cudaPboColor, stream));
   CUDA_CHECK(cudaGraphicsUnmapResources(1, &cudaPboSmoothed, stream));
 }
 
@@ -227,4 +236,6 @@ void process_movement(GLFWwindow *window, float deltaTime)
     state->camera.ProcessKeyboard(LEFT, deltaTime);
   if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
     state->camera.ProcessKeyboard(RIGHT, deltaTime);
+
+  state->needs_redraw = true;
 }

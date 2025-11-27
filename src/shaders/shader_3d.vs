@@ -11,7 +11,7 @@ void main()
 
     float h = texture(texture2, uv).r;
 
-    vec4 pos = vec4(aPos.x, h, aPos.y, 1.0);
+    vec4 pos = vec4(aPos.x, sqrt(sqrt(h)) * 0.05, aPos.y, 1.0);
 
     gl_Position = lookAt * pos;
     vIntensity = h;

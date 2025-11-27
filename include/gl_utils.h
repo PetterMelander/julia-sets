@@ -31,7 +31,7 @@ struct ProgramState
 };
 
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
-void mouse_callback(GLFWwindow* window, double xposIn, double yposIn);
+void mouse_callback(GLFWwindow *window, double xposIn, double yposIn);
 void mouse_button_callback(GLFWwindow *window, int button, int action, int mods);
 void scroll_callback(GLFWwindow *window, double xoffset, double yoffset);
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods);
@@ -40,7 +40,10 @@ void process_movement(GLFWwindow *window, float deltaTime);
 void update_theta(ProgramState &state, GLFWwindow *window);
 void redraw_image(GLFWwindow *window, Shader &shader, unsigned int texture, unsigned int VAO);
 void switch_texture(ProgramState &state, int index, unsigned int texture, GLuint *pboIds);
-void compute_julia_sp(ProgramState &state, float *d_raw_buffer, cudaGraphicsResource *cudaPboColor,
+void compute_julia_sp(ProgramState &state, cudaGraphicsResource *cudaPboColor,
                       cudaGraphicsResource *cudaPboSmoothed, cudaStream_t stream);
 void compute_julia_dp(ProgramState &state, float *h_cuda_buffer, float *d_cuda_buffer,
                       cudaGraphicsResource *cudaPboResource, cudaStream_t stream);
+
+void redraw_image_3d(GLFWwindow *window, Shader &shader, unsigned int texture, unsigned int VAO);
+void switch_texture_3d(ProgramState &state, int index, unsigned int texture, GLuint *pboIds);

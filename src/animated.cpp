@@ -23,8 +23,8 @@ int main()
 {
   // set initial state
   ProgramState state;
-  state.width = 2048;
-  state.height = 2048;
+  state.width = 1536;
+  state.height = 1536;
 
   // width must be multiple of 8 for avx kernel to work
   state.width = (state.width + 7) / 8 * 8;
@@ -35,32 +35,29 @@ int main()
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-  GLFWwindow *window =
+  GLFWwindow *window_2d =
       glfwCreateWindow(state.width, state.height, "Julia", NULL, NULL);
-  if (window == NULL)
+  if (window_2d == NULL)
+  {
+    std::cout << "Failed to create window_2d" << std::endl;
+    glfwTerminate();
+    return -1;
+  }
+  GLFWwindow *window_3d =
+      glfwCreateWindow(state.width, state.height, "Julia", NULL, window_2d);
+  if (window_3d == NULL)
   {
     std::cout << "Failed to create window" << std::endl;
     glfwTerminate();
     return -1;
   }
-  glfwMakeContextCurrent(window);
+  glfwMakeContextCurrent(window_2d);
 
   if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
   {
     std::cout << "Failed to initialize GLAD" << std::endl;
     return -1;
   }
-
-  // set user input callbacks
-  glfwSetWindowUserPointer(window, &state);
-  glfwSetCursorPosCallback(window, mouse_callback);
-  glfwSetScrollCallback(window, scroll_callback);
-  glfwSetMouseButtonCallback(window, mouse_button_callback);
-  glfwSetKeyCallback(window, key_callback);
-
-  glViewport(0, 0, state.width, state.height);
-  glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-  glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
   // init cuda buffers & streams
   // buffers are used for double precision color mapping
@@ -80,7 +77,7 @@ int main()
   // init pixel buffers for 2d
   // used directly for single precision
   GLuint colorPboIds[2];
-  int dsize = sizeof(unsigned char) * state.width * state.height * 3;
+  int dsize = sizeof(float) * state.width * state.height;
   glGenBuffers(2, colorPboIds);
   glBindBuffer(GL_PIXEL_UNPACK_BUFFER, colorPboIds[0]);
   glBufferData(GL_PIXEL_UNPACK_BUFFER, dsize, 0, GL_DYNAMIC_DRAW);
@@ -109,14 +106,31 @@ int main()
   CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&smoothCudaPboResources[1], smoothPboIds[1],
                                           cudaGraphicsMapFlagsWriteDiscard));
 
-  // init texture and vao to draw on
+  // init texture
   unsigned int texture_2d;
   glGenTextures(1, &texture_2d);
   glBindTexture(GL_TEXTURE_2D, texture_2d);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, state.width, state.height, 0, GL_RGB,
-               GL_UNSIGNED_BYTE, 0);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, state.width, state.height, 0, GL_RED,
+               GL_FLOAT, 0);
+
+  /*
+  ==============================
+        2D WINDOW SETUP
+  ==============================
+  */
+  glfwSwapInterval(0);
+  glfwSetWindowUserPointer(window_2d, &state);
+
+  // set user input callbacks
+  glfwSetScrollCallback(window_2d, scroll_callback);
+  glfwSetMouseButtonCallback(window_2d, mouse_button_callback);
+  glfwSetKeyCallback(window_2d, key_callback);
+
+  glViewport(0, 0, state.width, state.height);
+  glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+  glfwSetFramebufferSizeCallback(window_2d, framebuffer_size_callback);
 
   unsigned int VAO_2d;
   glGenVertexArrays(1, &VAO_2d);
@@ -145,6 +159,21 @@ int main()
   Shader shader_2d("shaders/shader.vs", "shaders/shader.fs");
   shader_2d.use();
   shader_2d.setInt("texture1", 0);
+
+  /*
+  ==============================
+        3D WINDOW SETUP
+  ==============================
+  */
+
+  glfwMakeContextCurrent(window_3d);
+  glPointSize(1.5);
+
+  glfwSetWindowUserPointer(window_3d, &state);
+
+  glViewport(0, 0, state.width, state.height);
+  glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+  glfwSetFramebufferSizeCallback(window_3d, framebuffer_size_callback);
 
   std::vector<float> vertices_3d;
   vertices_3d.reserve(2 * state.width * state.height);
@@ -207,7 +236,6 @@ int main()
   // main render loop
   int bufIdx = 0;
   bool needs_texture_switch = false;
-  // glfwSwapInterval(0);
   double R = sqrt(3.0);
   double r = 2.2;
   double d = 0.3;
@@ -215,10 +243,11 @@ int main()
   glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)state.width / (float)state.height, 0.1f, 100.0f);
   glm::mat4 view = state.camera.GetViewMatrix();
 
-  while (!glfwWindowShouldClose(window))
+  while (!glfwWindowShouldClose(window_2d))
   {
-    update_pan(state, window);
-    update_theta(state, window);
+    update_pan(state, window_2d);
+    process_movement(window_2d, 0.005);
+    update_theta(state, window_2d);
 
     if (state.needs_redraw)
     {
@@ -232,7 +261,7 @@ int main()
       if (state.zoomLevel < 10000)
       {
         compute_julia_sp(
-            state, d_cuda_buffers[nextIdx],
+            state,
             colorCudaPboResources[nextIdx],
             smoothCudaPboResources[nextIdx],
             streams[nextIdx]);
@@ -247,11 +276,15 @@ int main()
       // make sure previous fractal is finished before rendering
       CUDA_CHECK(cudaStreamSynchronize(streams[bufIdx]));
 
+      glfwMakeContextCurrent(window_2d);
+      switch_texture(state, bufIdx, texture_2d, colorPboIds);
+      redraw_image(window_2d, shader_2d, texture_2d, VAO_2d);
+
+      glfwMakeContextCurrent(window_3d);
       view = state.camera.GetViewMatrix();
       shader_3d.setMat4("lookAt", projection * view);
-
-      switch_texture(state, bufIdx, texture_3d, smoothPboIds);
-      redraw_image(window, shader_3d, texture_3d, VAO_3d);
+      switch_texture_3d(state, nextIdx, texture_3d, smoothPboIds);
+      redraw_image_3d(window_3d, shader_3d, texture_3d, VAO_3d);
 
       state.needs_redraw = false;
       needs_texture_switch = true;
@@ -264,11 +297,15 @@ int main()
       // make sure previous fractal is finished before rendering
       CUDA_CHECK(cudaStreamSynchronize(streams[bufIdx]));
 
+      glfwMakeContextCurrent(window_2d);
+      switch_texture(state, nextIdx, texture_2d, colorPboIds);
+      redraw_image(window_2d, shader_2d, texture_2d, VAO_2d);
+
+      glfwMakeContextCurrent(window_3d);
       view = state.camera.GetViewMatrix();
       shader_3d.setMat4("lookAt", projection * view);
-
-      switch_texture(state, nextIdx, texture_3d, smoothPboIds);
-      redraw_image(window, shader_3d, texture_3d, VAO_3d);
+      switch_texture_3d(state, nextIdx, texture_3d, smoothPboIds);
+      redraw_image_3d(window_3d, shader_3d, texture_3d, VAO_3d);
 
       needs_texture_switch = false;
     }
