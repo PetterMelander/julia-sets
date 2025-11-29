@@ -1,13 +1,25 @@
 #include "cuda_kernels.cuh"
 #include "gl_utils.h"
 
-constexpr int MAX_ITERS = 1000;
-constexpr float R = 2.f;
-constexpr int BLOCK_SIZE_2D = 16;
-constexpr int BLOCK_SIZE_1D = 512;
+constexpr int BLOCK_SIZE_JULIA = 16;
+constexpr int BLOCK_SIZE_NORMALS = 32;
+
+__device__ __forceinline__ float2 operator+(const float2 a, const float2 b)
+{
+  return make_float2(a.x + b.x, a.y + b.y);
+}
+
+__device__ __forceinline__ void operator+=(float2 &a, const float2 b)
+{
+  a.x += b.x;
+  a.y += b.y;
+}
 
 __device__ float evaluate(float2 z, const float2 c)
 {
+  constexpr int MAX_ITERS = 1000;
+  constexpr float R = 10.0f;
+
   float escape_iter = MAX_ITERS;
   float escape_abs2 = 0;
   for (int i = 0; i < MAX_ITERS; ++i)
@@ -31,18 +43,6 @@ __device__ float evaluate(float2 z, const float2 c)
   return MAX_ITERS;
 }
 
-__device__ uchar3 map_color(float intensity)
-{
-  uchar3 rgb = {0, 0, 0};
-  if (intensity < MAX_ITERS)
-  {
-    rgb.x = (unsigned char)(__sinf(intensity * 0.05f + 5.423f) * 127 + 128);
-    rgb.y = (unsigned char)(__sinf(intensity * 0.05f + 4.359f) * 127 + 128);
-    rgb.z = (unsigned char)(__sinf(intensity * 0.05f + 1.150f) * 127 + 128);
-  }
-  return rgb;
-}
-
 __global__ void julia(float *const __restrict__ buffer, const float range, const float2 offsets,
                       const float2 c, const int width, const int height)
 {
@@ -60,143 +60,98 @@ __global__ void julia(float *const __restrict__ buffer, const float range, const
   }
 }
 
-__global__ void julia_smoothed_y(float *__restrict__ buffer, const int halo, const float range, const float2 offsets,
-                                 const float2 c, const int width, const int height)
-{
-  int x_idx = blockIdx.x;
-
-  int effective_dim = blockDim.x - 2 * halo;
-  int y_idx = blockIdx.y * effective_dim + threadIdx.x - halo;
-
-  __shared__ float escape_iters[512];
-
-  float intensity = 0.0f;
-  if (y_idx < height + halo)
-  {
-    float re = ((float)x_idx / (width - 1)) * range * 2 - range - offsets.x;
-    float im = ((float)y_idx / (height - 1)) * range * 2 - range - offsets.y;
-    float2 z{re, im};
-
-    intensity = evaluate(z, c) * 0.001f;
-  }
-
-  escape_iters[threadIdx.x] = intensity;
-  __syncthreads();
-
-  if (threadIdx.x >= halo && threadIdx.x <= blockDim.y - halo && y_idx < height)
-  {
-    float accum = 0.0f;
-    for (int i = -halo; i <= halo; ++i)
-    {
-      accum += escape_iters[threadIdx.x + i];
-    }
-    accum = accum / (2 * halo + 1);
-    buffer[y_idx * width + x_idx] = accum;
-  }
-}
-
-__global__ void smooth_julia_x(float *buffer, const int halo, const float range, const float2 offsets,
-                               const float2 c, const int width, const int height)
-{
-  int y_idx = blockIdx.y;
-
-  int effective_dim = blockDim.x - 2 * halo;
-  int x_idx = blockIdx.x * effective_dim + threadIdx.x - halo;
-  __shared__ float escape_iters[512];
-
-  float intensity = 0.0f;
-  if (x_idx >= 0 && x_idx < width)
-  {
-    intensity = buffer[blockIdx.y * width + x_idx];
-  }
-
-  escape_iters[threadIdx.x] = intensity;
-  __syncthreads();
-
-  if (threadIdx.x >= halo && threadIdx.x <= blockDim.x - halo && x_idx < width)
-  {
-    float accum = 0.0f;
-    for (int i = -halo; i <= halo; ++i)
-    {
-      accum += escape_iters[threadIdx.x + i];
-    }
-    accum = accum / (2 * halo + 1);
-    buffer[y_idx * width + x_idx] = accum;
-  }
-  if (x_idx < halo)
-  {
-    float accum = 0.0f;
-    for (int i = -halo; i <= halo; ++i)
-    {
-      if (i >= 0)
-      {
-        accum += escape_iters[threadIdx.x + i];
-      }
-      accum = accum / (halo + 1 + x_idx);
-    }
-    buffer[y_idx * width + x_idx] = accum;
-  }
-  else if (x_idx > width - halo && x_idx < width)
-  {
-    float accum = 0.0f;
-    for (int i = -halo; i <= halo; ++i)
-    {
-      if (i < blockDim.x)
-      {
-        accum += escape_iters[threadIdx.x + i];
-      }
-      accum = accum / (halo + 1 + (blockDim.x - 1 - x_idx));
-    }
-    buffer[y_idx * width + x_idx] = accum;
-  }
-}
-
-__global__ void map_colors(uchar3 *__restrict__ buffer, const float *__restrict__ intensities, const int dsize)
-{
-  int idx = blockIdx.x * blockDim.x + threadIdx.x;
-
-  if (idx < dsize)
-  {
-    buffer[idx] = map_color(intensities[idx]);
-  }
-}
-
 void compute_julia_cuda(ProgramState state, float *__restrict__ buffer, cudaStream_t stream)
 {
   float2 c = make_float2(state.c_re, state.c_im);
   float2 offsets = make_float2(state.x_offset, state.y_offset);
 
-  unsigned int n_blocks = (state.width + BLOCK_SIZE_2D - 1) / BLOCK_SIZE_2D;
-  dim3 block_dims{BLOCK_SIZE_2D, BLOCK_SIZE_2D};
+  unsigned int n_blocks = (state.width + BLOCK_SIZE_JULIA - 1) / BLOCK_SIZE_JULIA;
+  dim3 block_dims{BLOCK_SIZE_JULIA, BLOCK_SIZE_JULIA};
   dim3 grid_dims{n_blocks, n_blocks};
   julia<<<grid_dims, block_dims, 0, stream>>>(buffer, (float)(1.0 / state.zoomLevel),
                                               offsets, c, state.width, state.height);
   CUDA_CHECK(cudaGetLastError());
 }
 
-void map_colors_cuda(unsigned char *__restrict__ buffer, const float *__restrict__ intensities, const int dsize, cudaStream_t stream)
+template <int BLOCK_H, int BLOCK_W>
+__global__ void compute_normals(const float *__restrict__ const h, float2 *__restrict__ out,
+                                const int height, const int width)
 {
-  uchar3 *buffer_ptr = reinterpret_cast<uchar3 *>(buffer);
+  constexpr int HALO = 1;
+  constexpr int TILE_H = BLOCK_H + 2 * HALO;
+  constexpr int TILE_W = BLOCK_W + 2 * HALO;
+  constexpr int NUM_THREADS = BLOCK_H * BLOCK_W;
 
-  int num_blocks = (dsize + BLOCK_SIZE_1D - 1) / BLOCK_SIZE_1D;
-  map_colors<<<num_blocks, BLOCK_SIZE_1D, 0, stream>>>(buffer_ptr, intensities, dsize);
-  CUDA_CHECK(cudaGetLastError());
+  int x_idx = BLOCK_W * blockIdx.x + threadIdx.x;
+  int y_idx = BLOCK_H * blockIdx.y + threadIdx.y;
+
+  int tx = threadIdx.x;
+  int ty = threadIdx.y;
+
+  __shared__ float s_h[TILE_H][TILE_W];
+
+  // load h tile to smem
+  int tid = threadIdx.y * BLOCK_W + threadIdx.x;
+  int tile_top_left_x = blockIdx.x * BLOCK_W - HALO;
+  int tile_top_left_y = blockIdx.y * BLOCK_H - HALO;
+
+  for (int i = tid; i < TILE_H * TILE_W; i += NUM_THREADS)
+  {
+    int ly = i / TILE_W; // div and mod are optimized away because constexpr
+    int lx = i % TILE_W;
+
+    int gy = tile_top_left_y + ly;
+    int gx = tile_top_left_x + lx;
+
+    if (gx >= 0 && gx < width && gy >= 0 && gy < height)
+      s_h[ly][lx] = __fsqrt_rz(__fsqrt_rz(h[gy * width + gx])) * 0.075f; // TODO: decide
+    else
+      s_h[ly][lx] = 0.0f;
+  }
+  __syncthreads();
+
+  auto getUpperNormal = [&](int x, int y)
+  {
+    float h00 = s_h[y][x];
+    float h10 = s_h[y][x + 1];
+    float h11 = s_h[y + 1][x + 1];
+    return float2{h00 - h10, h10 - h11};
+  };
+
+  auto getLowerNormal = [&](int x, int y)
+  {
+    float h00 = s_h[y][x];
+    float h01 = s_h[y + 1][x];
+    float h11 = s_h[y + 1][x + 1];
+    return float2{h01 - h11, h00 - h01};
+  };
+
+  if (x_idx < width && y_idx < height)
+  {
+    // accumulate normals
+    int sx = tx + HALO;
+    int sy = ty + HALO;
+    float2 myNormal = getUpperNormal(sx, sy);
+    myNormal += getLowerNormal(sx, sy);
+    myNormal += getUpperNormal(sx - 1, sy - 1);
+    myNormal += getLowerNormal(sx - 1, sy - 1);
+    myNormal += getUpperNormal(sx - 1, sy);
+    myNormal += getLowerNormal(sx, sy - 1);
+
+    out[2 * (y_idx * width + x_idx) + 1] = myNormal;
+  }
 }
 
-void compute_julia_cuda_smoothed(ProgramState state, int halo, float *buffer, cudaStream_t stream)
+void compute_normals_cuda(float *const h, float *out,
+                          const int height, const int width, cudaStream_t stream)
 {
-  float2 c = make_float2(state.c_re, state.c_im);
-  float2 offsets = make_float2(state.x_offset, state.y_offset);
+  unsigned int grid_h = (height + BLOCK_SIZE_NORMALS - 1) / BLOCK_SIZE_NORMALS;
+  unsigned int grid_w = (width + BLOCK_SIZE_NORMALS - 1) / BLOCK_SIZE_NORMALS;
+  dim3 grid_dims{grid_w, grid_h};
+  dim3 block_dims{BLOCK_SIZE_NORMALS, BLOCK_SIZE_NORMALS};
 
-  unsigned int n_blocks = (state.height + (BLOCK_SIZE_1D - 2 * halo) - 1) / (BLOCK_SIZE_1D - 2 * halo);
-  dim3 grid_dims{static_cast<unsigned int>(state.width), n_blocks};
-  julia_smoothed_y<<<grid_dims, BLOCK_SIZE_1D, 512 * sizeof(float), stream>>>(buffer, halo, (float)(1.0 / state.zoomLevel),
-                                                                              offsets, c, state.width, state.height);
-  CUDA_CHECK(cudaGetLastError());
-
-  n_blocks = (state.width + (BLOCK_SIZE_1D - 2 * halo) - 1) / (BLOCK_SIZE_1D - 2 * halo);
-  grid_dims = dim3{n_blocks, static_cast<unsigned int>(state.height)};
-  smooth_julia_x<<<grid_dims, BLOCK_SIZE_1D, 512 * sizeof(float), stream>>>(buffer, halo, (float)(1.0 / state.zoomLevel),
-                                                                            offsets, c, state.width, state.height);
+  float2 *out_f2 = reinterpret_cast<float2 *>(out);
+  compute_normals<BLOCK_SIZE_NORMALS, BLOCK_SIZE_NORMALS>
+      <<<grid_dims, block_dims, 0, stream>>>(h, out_f2, height, width);
   CUDA_CHECK(cudaGetLastError());
 }

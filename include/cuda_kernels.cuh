@@ -20,5 +20,5 @@
 #endif
 
 void compute_julia_cuda(ProgramState state, float *__restrict__ buffer, cudaStream_t stream);
-void map_colors_cuda(unsigned char *__restrict__ buffer, const float *__restrict__ intensities, const int dsize, cudaStream_t stream);
-void compute_julia_cuda_smoothed(ProgramState state, int halo, float *buffer, cudaStream_t stream);
+void compute_normals_cuda(float *const h, float *out,
+                          const int height, const int width, cudaStream_t stream);

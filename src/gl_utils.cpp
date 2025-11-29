@@ -161,7 +161,7 @@ void switch_texture_3d(ProgramState &state, int index, unsigned int texture, GLu
 }
 
 void compute_julia_sp(ProgramState &state, cudaGraphicsResource *cudaPboColor,
-                      cudaGraphicsResource *cudaPboSmoothed, cudaStream_t stream)
+                      cudaGraphicsResource *cudaPboSmoothed, cudaGraphicsResource *cudaVbo, cudaStream_t stream)
 {
   float *d_color_buffer = nullptr;
   CUDA_CHECK(cudaGraphicsMapResources(1, &cudaPboColor, 0));
@@ -171,6 +171,10 @@ void compute_julia_sp(ProgramState &state, cudaGraphicsResource *cudaPboColor,
   CUDA_CHECK(cudaGraphicsMapResources(1, &cudaPboSmoothed, 0));
   CUDA_CHECK(cudaGraphicsResourceGetMappedPointer((void **)&d_smoothed_buffer, nullptr, cudaPboSmoothed));
 
+  float *d_vbo = nullptr;
+  CUDA_CHECK(cudaGraphicsMapResources(1, &cudaVbo, 0));
+  CUDA_CHECK(cudaGraphicsResourceGetMappedPointer((void **)&d_vbo, nullptr, cudaVbo));
+
   compute_julia_cuda(state, d_color_buffer, stream);
 
   // smooth for 3d
@@ -178,31 +182,22 @@ void compute_julia_sp(ProgramState &state, cudaGraphicsResource *cudaPboColor,
   NppStreamContext ctx;
   ctx.hStream = stream;
   nppiFilterGaussBorder_32f_C1R_Ctx(
-    d_color_buffer,
-    sizeof(float) * state.width,
-    size,
-    NppiPoint{0, 0},
-    d_smoothed_buffer,
-    sizeof(float) * state.width,
-    size,
-    NPP_MASK_SIZE_9_X_9,
-    NPP_BORDER_REPLICATE,
-    ctx
-  );
-  // nppiFilterBoxBorder_32f_C1R_Ctx(
-  //     d_color_buffer,
-  //     sizeof(float) * state.width,
-  //     size,
-  //     NppiPoint{0, 0},
-  //     d_smoothed_buffer,
-  //     sizeof(float) * state.width,
-  //     size,
-  //     NppiSize{15, 15},
-  //     NppiPoint{7, 7},
-  //     NPP_BORDER_REPLICATE,
-  //     ctx);
+      d_color_buffer,
+      sizeof(float) * state.width,
+      size,
+      NppiPoint{0, 0},
+      d_smoothed_buffer,
+      sizeof(float) * state.width,
+      size,
+      NPP_MASK_SIZE_9_X_9,
+      NPP_BORDER_REPLICATE,
+      ctx);
+
+  compute_normals_cuda(d_smoothed_buffer, d_vbo, state.height, state.width, stream);
+
   CUDA_CHECK(cudaGraphicsUnmapResources(1, &cudaPboColor, stream));
   CUDA_CHECK(cudaGraphicsUnmapResources(1, &cudaPboSmoothed, stream));
+  CUDA_CHECK(cudaGraphicsUnmapResources(1, &cudaVbo, stream));
 }
 
 void compute_julia_dp(ProgramState &state, float *h_cuda_buffer, float *d_cuda_buffer,
@@ -217,7 +212,7 @@ void compute_julia_dp(ProgramState &state, float *h_cuda_buffer, float *d_cuda_b
   CUDA_CHECK(cudaGraphicsResourceGetMappedPointer(
       (void **)&d_buffer, nullptr, cudaPboResource));
 
-  map_colors_cuda(d_buffer, d_cuda_buffer, state.width * state.height, stream);
+  // map_colors_cuda(d_buffer, d_cuda_buffer, state.width * state.height, stream);
   CUDA_CHECK(cudaGraphicsUnmapResources(1, &cudaPboResource, stream));
 }
 

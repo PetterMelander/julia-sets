@@ -23,8 +23,8 @@ int main()
 {
   // set initial state
   ProgramState state;
-  state.width = 1536;
-  state.height = 1536;
+  state.width = 2048;
+  state.height = 2048;
 
   // width must be multiple of 8 for avx kernel to work
   state.width = (state.width + 7) / 8 * 8;
@@ -86,7 +86,7 @@ int main()
 
   cudaGraphicsResource *colorCudaPboResources[2];
   CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&colorCudaPboResources[0], colorPboIds[0],
-                                          cudaGraphicsMapFlagsWriteDiscard));
+                                          cudaGraphicsMapFlagsWriteDiscard)); // TODO: we currently read from this.
   CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&colorCudaPboResources[1], colorPboIds[1],
                                           cudaGraphicsMapFlagsWriteDiscard));
 
@@ -151,8 +151,7 @@ int main()
 
   glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)0);
   glEnableVertexAttribArray(0);
-  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float),
-                        (void *)(2 * sizeof(float)));
+  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)(2 * sizeof(float)));
   glEnableVertexAttribArray(1);
 
   // init shaders
@@ -185,6 +184,8 @@ int main()
     {
       vertices_3d.push_back((float)x / (state.width - 1) * 2 - 1);
       vertices_3d.push_back((float)y / (state.height - 1) * 2 - 1);
+      vertices_3d.push_back(0.0f);
+      vertices_3d.push_back(0.0f);
 
       if (x < state.width - 1 && y < state.height - 1)
       {
@@ -200,22 +201,43 @@ int main()
     }
   }
 
-  unsigned int VAO_3d;
-  glGenVertexArrays(1, &VAO_3d);
-  glBindVertexArray(VAO_3d);
+  GLuint VAOs_3d[2];
+  glGenVertexArrays(2, VAOs_3d);
+  glBindVertexArray(VAOs_3d[0]);
+  GLuint VBOs_3d[2];
+  glGenBuffers(2, VBOs_3d);
+  cudaGraphicsResource *cudaVboResources[2];
+  GLuint EBOs_3d[2];
+  glGenBuffers(2, EBOs_3d);
 
-  unsigned int VBO_3d;
-  glGenBuffers(1, &VBO_3d);
-  glBindBuffer(GL_ARRAY_BUFFER, VBO_3d);
-  glBufferData(GL_ARRAY_BUFFER, vertices_3d.size() * sizeof(float), vertices_3d.data(), GL_STATIC_DRAW);
+  glBindBuffer(GL_ARRAY_BUFFER, VBOs_3d[0]);
+  glBufferData(GL_ARRAY_BUFFER, vertices_3d.size() * sizeof(float), vertices_3d.data(), GL_DYNAMIC_DRAW);
 
-  unsigned int EBO_3d;
-  glGenBuffers(1, &EBO_3d);
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO_3d);
+  CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&cudaVboResources[0], VBOs_3d[0],
+                                          cudaGraphicsMapFlagsWriteDiscard));
+
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBOs_3d[0]);
   glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices_3d.size() * sizeof(unsigned int), indices_3d.data(), GL_STATIC_DRAW);
 
-  glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void *)0);
+  glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)0);
   glEnableVertexAttribArray(0);
+  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)(2 * sizeof(float)));
+  glEnableVertexAttribArray(1);
+
+  glBindVertexArray(VAOs_3d[1]);
+  glBindBuffer(GL_ARRAY_BUFFER, VBOs_3d[1]);
+  glBufferData(GL_ARRAY_BUFFER, vertices_3d.size() * sizeof(float), vertices_3d.data(), GL_DYNAMIC_DRAW);
+
+  CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&cudaVboResources[1], VBOs_3d[1],
+                                          cudaGraphicsMapFlagsWriteDiscard));
+
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBOs_3d[1]);
+  glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices_3d.size() * sizeof(unsigned int), indices_3d.data(), GL_STATIC_DRAW);
+
+  glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)0);
+  glEnableVertexAttribArray(0);
+  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)(2 * sizeof(float)));
+  glEnableVertexAttribArray(1);
 
   unsigned int texture_3d;
   glGenTextures(1, &texture_3d);
@@ -230,6 +252,9 @@ int main()
   Shader shader_3d("shaders/shader_3d.vs", "shaders/shader_3d.fs");
   shader_3d.use();
   shader_3d.setInt("texture2", 1);
+  shader_3d.setFloat("xstep", 2.0 / (float)(state.width - 1));
+  shader_3d.setFloat("ystep", 2.0 / (float)(state.height - 1));
+  shader_3d.setVec3("viewPos", state.camera.Front);
 
   glEnable(GL_DEPTH_TEST);
 
@@ -246,7 +271,7 @@ int main()
   while (!glfwWindowShouldClose(window_2d))
   {
     update_pan(state, window_2d);
-    process_movement(window_2d, 0.005);
+    process_movement(window_2d, 0.01);
     update_theta(state, window_2d);
 
     if (state.needs_redraw)
@@ -254,6 +279,8 @@ int main()
       // compute next fractal and display previously computed fractal
       state.c_re = (R - r) * cos(state.theta) + d * cos((R - r) * state.theta / r);
       state.c_im = (R - r) * sin(state.theta) - d * sin((R - r) * state.theta / r);
+
+      shader_3d.setVec3("viewPos", state.camera.Front);
 
       bufIdx = (bufIdx + 1) % 2;
       int nextIdx = (bufIdx + 1) % 2;
@@ -264,6 +291,7 @@ int main()
             state,
             colorCudaPboResources[nextIdx],
             smoothCudaPboResources[nextIdx],
+            cudaVboResources[nextIdx],
             streams[nextIdx]);
       }
       else
@@ -284,7 +312,7 @@ int main()
       view = state.camera.GetViewMatrix();
       shader_3d.setMat4("lookAt", projection * view);
       switch_texture_3d(state, nextIdx, texture_3d, smoothPboIds);
-      redraw_image_3d(window_3d, shader_3d, texture_3d, VAO_3d);
+      redraw_image_3d(window_3d, shader_3d, texture_3d, VAOs_3d[bufIdx]);
 
       state.needs_redraw = false;
       needs_texture_switch = true;
@@ -305,7 +333,7 @@ int main()
       view = state.camera.GetViewMatrix();
       shader_3d.setMat4("lookAt", projection * view);
       switch_texture_3d(state, nextIdx, texture_3d, smoothPboIds);
-      redraw_image_3d(window_3d, shader_3d, texture_3d, VAO_3d);
+      redraw_image_3d(window_3d, shader_3d, texture_3d, VAOs_3d[bufIdx]);
 
       needs_texture_switch = false;
     }

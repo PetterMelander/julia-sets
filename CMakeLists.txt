@@ -13,7 +13,7 @@ else()
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -march=native -fopenmp -ffast-math -funroll-loops -fno-math-errno")
 endif()
 
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O3 --use_fast_math --extra-device-vectorization --ptxas-options=-O3")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O3 --use_fast_math --extra-device-vectorization --ptxas-options=-O3 -lineinfo")
 set(CMAKE_CUDA_STANDARD 17)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 set(CMAKE_CUDA_ARCHITECTURES 75 89) 
@@ -41,9 +41,9 @@ set_property(TARGET julia_lib PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 target_link_libraries(julia_lib PUBLIC
     glfw
     OpenGL::GL 
-    CUDA::cudart
-    CUDA::nppif
-    CUDA::nppc
+    CUDA::cudart_static
+    CUDA::nppif_static
+    CUDA::nppc_static
 )
 
 add_executable(animated src/animated.cpp)
@@ -57,9 +57,9 @@ add_custom_command(TARGET animated POST_BUILD
     COMMENT "Copying shaders to binary directory..."
 )
 
-# add_executable(3d src/3d.cpp)
-# target_link_libraries(3d PRIVATE julia_lib glm)
-# set_property(TARGET 3d PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+# add_executable(norm src/test.cpp)
+# target_link_libraries(norm PRIVATE julia_lib glm)
+# set_property(TARGET norm PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
 
 # add_custom_command(TARGET 3d POST_BUILD
 #     COMMAND ${CMAKE_COMMAND} -E copy_directory
