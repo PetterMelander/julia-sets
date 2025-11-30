@@ -5,8 +5,8 @@
 
 #include <cuda_gl_interop.h>
 
-#include "shader.h"
 #include "camera.h"
+#include "shader.h"
 
 struct ProgramState
 {
@@ -39,11 +39,11 @@ void update_pan(ProgramState &state, GLFWwindow *window);
 void process_movement(GLFWwindow *window, float deltaTime);
 void update_theta(ProgramState &state, GLFWwindow *window);
 void redraw_image(GLFWwindow *window, Shader &shader, unsigned int texture, unsigned int VAO);
-void switch_texture(ProgramState &state, int index, unsigned int texture, GLuint *pboIds);
-void compute_julia_sp(ProgramState &state, cudaGraphicsResource *cudaPboColor,
+void switch_texture(const ProgramState &state, int index, unsigned int texture, GLuint *pboIds);
+void compute_julia_sp(const ProgramState &state, cudaGraphicsResource *cudaPboColor,
                       cudaGraphicsResource *cudaPboSmoothed, cudaGraphicsResource *cudaVbo, cudaStream_t stream);
-void compute_julia_dp(ProgramState &state, float *h_cuda_buffer, float *d_cuda_buffer,
-                      cudaGraphicsResource *cudaPboResource, cudaStream_t stream);
+void compute_julia_dp(const ProgramState &state, float *h_cuda_buffer, cudaGraphicsResource *cudaPboColor,
+                      cudaGraphicsResource *cudaPboSmoothed, cudaGraphicsResource *cudaVbo, cudaStream_t stream);
 
 void redraw_image_3d(GLFWwindow *window, Shader &shader, unsigned int texture, unsigned int VAO);
-void switch_texture_3d(ProgramState &state, int index, unsigned int texture, GLuint *pboIds);
+void switch_texture_3d(const ProgramState &state, int index, unsigned int texture, GLuint *pboIds);

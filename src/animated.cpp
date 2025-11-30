@@ -1,15 +1,20 @@
+#include <chrono>
 #include <cmath>
 #include <cstddef>
-#include <cuda_runtime_api.h>
-#include <driver_types.h>
+#include <thread>
+
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
-#include <cuda_runtime.h>
+
 #include <cuda_gl_interop.h>
-#include "shader.h"
+#include <cuda_runtime.h>
+#include <cuda_runtime_api.h>
+#include <driver_types.h>
+
 #include "avx_kernels.h"
 #include "cuda_kernels.cuh"
 #include "gl_utils.h"
+#include "shader.h"
 
 #ifdef WIN32
 #include <windows.h>
@@ -34,17 +39,20 @@ int main()
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-
+  
+  glfwWindowHint(GLFW_SAMPLES, 0);
   GLFWwindow *window_2d =
-      glfwCreateWindow(state.width, state.height, "Julia", NULL, NULL);
+  glfwCreateWindow(state.width, state.height, "Julia", NULL, NULL);
   if (window_2d == NULL)
   {
     std::cout << "Failed to create window_2d" << std::endl;
     glfwTerminate();
     return -1;
   }
+
+  glfwWindowHint(GLFW_SAMPLES, 16);
   GLFWwindow *window_3d =
-      glfwCreateWindow(state.width, state.height, "Julia", NULL, window_2d);
+  glfwCreateWindow(state.width, state.height, "Julia", NULL, window_2d);
   if (window_3d == NULL)
   {
     std::cout << "Failed to create window" << std::endl;
@@ -52,13 +60,13 @@ int main()
     return -1;
   }
   glfwMakeContextCurrent(window_2d);
-
+  
   if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
   {
     std::cout << "Failed to initialize GLAD" << std::endl;
     return -1;
   }
-
+  
   // init cuda buffers & streams
   // buffers are used for double precision color mapping
   int raw_dsize = state.width * state.height * sizeof(float);
@@ -69,10 +77,6 @@ int main()
   float *h_cuda_buffers[2];
   cudaMallocHost(&h_cuda_buffers[0], raw_dsize);
   cudaMallocHost(&h_cuda_buffers[1], raw_dsize);
-
-  float *d_cuda_buffers[2];
-  cudaMalloc(&d_cuda_buffers[0], raw_dsize);
-  cudaMalloc(&d_cuda_buffers[1], raw_dsize);
 
   // init pixel buffers for 2d
   // used directly for single precision
@@ -86,9 +90,9 @@ int main()
 
   cudaGraphicsResource *colorCudaPboResources[2];
   CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&colorCudaPboResources[0], colorPboIds[0],
-                                          cudaGraphicsMapFlagsWriteDiscard)); // TODO: we currently read from this.
+                                          cudaGraphicsMapFlagsNone));
   CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&colorCudaPboResources[1], colorPboIds[1],
-                                          cudaGraphicsMapFlagsWriteDiscard));
+                                          cudaGraphicsMapFlagsNone));
 
   // init pixel buffers for 3d
   // used directly for single precision
@@ -166,7 +170,10 @@ int main()
   */
 
   glfwMakeContextCurrent(window_3d);
-  glPointSize(1.5);
+  glfwSwapInterval(1);
+
+  glEnable(GL_CULL_FACE);
+  glFrontFace(GL_CW);
 
   glfwSetWindowUserPointer(window_3d, &state);
 
@@ -180,6 +187,7 @@ int main()
   indices_3d.reserve(3 * 2 * (state.width - 1) * (state.height - 1));
   for (int y = 0; y < state.height; ++y)
   {
+    #pragma omp simd
     for (int x = 0; x < state.width; ++x)
     {
       vertices_3d.push_back((float)x / (state.width - 1) * 2 - 1);
@@ -255,6 +263,8 @@ int main()
   shader_3d.setFloat("xstep", 2.0 / (float)(state.width - 1));
   shader_3d.setFloat("ystep", 2.0 / (float)(state.height - 1));
   shader_3d.setVec3("viewPos", state.camera.Front);
+  glm::vec3 prevFront;
+  glm::mat4 prevView;
 
   glEnable(GL_DEPTH_TEST);
 
@@ -270,6 +280,8 @@ int main()
 
   while (!glfwWindowShouldClose(window_2d))
   {
+    prevFront = state.camera.Front;
+    prevView = state.camera.GetViewMatrix();
     update_pan(state, window_2d);
     process_movement(window_2d, 0.01);
     update_theta(state, window_2d);
@@ -280,7 +292,7 @@ int main()
       state.c_re = (R - r) * cos(state.theta) + d * cos((R - r) * state.theta / r);
       state.c_im = (R - r) * sin(state.theta) - d * sin((R - r) * state.theta / r);
 
-      shader_3d.setVec3("viewPos", state.camera.Front);
+      shader_3d.setVec3("viewPos", prevFront);
 
       bufIdx = (bufIdx + 1) % 2;
       int nextIdx = (bufIdx + 1) % 2;
@@ -296,8 +308,13 @@ int main()
       }
       else
       {
-        compute_julia_dp(state, h_cuda_buffers[nextIdx], d_cuda_buffers[nextIdx],
-                         colorCudaPboResources[nextIdx], streams[nextIdx]);
+        compute_julia_dp(
+            state,
+            h_cuda_buffers[nextIdx],
+            colorCudaPboResources[nextIdx],
+            smoothCudaPboResources[nextIdx],
+            cudaVboResources[nextIdx],
+            streams[nextIdx]);
       }
       glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
 
@@ -309,9 +326,8 @@ int main()
       redraw_image(window_2d, shader_2d, texture_2d, VAO_2d);
 
       glfwMakeContextCurrent(window_3d);
-      view = state.camera.GetViewMatrix();
-      shader_3d.setMat4("lookAt", projection * view);
-      switch_texture_3d(state, nextIdx, texture_3d, smoothPboIds);
+      shader_3d.setMat4("lookAt", projection * prevView);
+      switch_texture_3d(state, bufIdx, texture_3d, smoothPboIds);
       redraw_image_3d(window_3d, shader_3d, texture_3d, VAOs_3d[bufIdx]);
 
       state.needs_redraw = false;
@@ -320,6 +336,8 @@ int main()
     else if (needs_texture_switch)
     {
       // if we just paused, render last computed fractal, then stop
+      shader_3d.setVec3("viewPos", state.camera.Front);
+      
       int nextIdx = (bufIdx + 1) % 2;
 
       // make sure previous fractal is finished before rendering
@@ -333,17 +351,19 @@ int main()
       view = state.camera.GetViewMatrix();
       shader_3d.setMat4("lookAt", projection * view);
       switch_texture_3d(state, nextIdx, texture_3d, smoothPboIds);
-      redraw_image_3d(window_3d, shader_3d, texture_3d, VAOs_3d[bufIdx]);
+      redraw_image_3d(window_3d, shader_3d, texture_3d, VAOs_3d[nextIdx]);
 
       needs_texture_switch = false;
+    }
+    else
+    {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 
     glfwPollEvents();
   }
   glfwTerminate();
 
-  cudaFree(d_cuda_buffers[0]);
-  cudaFree(d_cuda_buffers[1]);
   cudaFreeHost(h_cuda_buffers[0]);
   cudaFreeHost(h_cuda_buffers[1]);
 

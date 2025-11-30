@@ -1,8 +1,9 @@
+#include "avx_kernels.h"
+#include "gl_utils.h"
+
 #include <cmath>
 #include <immintrin.h>
 #include <omp.h>
-#include "gl_utils.h"
-#include "avx_kernels.h"
 
 constexpr int MAX_ITERS = 1000;
 constexpr float R_s = 2.0f;
@@ -166,7 +167,7 @@ void julia(float *intensities, double range, double x_offset, double y_offset,
   __m512i index_ivec = _mm512_set_epi64(7, 6, 5, 4, 3, 2, 1, 0);
   __m512d index_vec = _mm512_cvtepi64_pd(index_ivec);
 
-#pragma omp parallel for schedule(dynamic)
+#pragma omp parallel for schedule(dynamic, 1)
   for (int y = 0; y < height; ++y)
   {
     // vectorize imaginary part (const across vector)

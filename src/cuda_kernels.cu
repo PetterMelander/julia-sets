@@ -18,7 +18,7 @@ __device__ __forceinline__ void operator+=(float2 &a, const float2 b)
 __device__ float evaluate(float2 z, const float2 c)
 {
   constexpr int MAX_ITERS = 1000;
-  constexpr float R = 10.0f;
+  constexpr float R = 2.0f;
 
   float escape_iter = MAX_ITERS;
   float escape_abs2 = 0;
@@ -60,7 +60,7 @@ __global__ void julia(float *const __restrict__ buffer, const float range, const
   }
 }
 
-void compute_julia_cuda(ProgramState state, float *__restrict__ buffer, cudaStream_t stream)
+void compute_julia_cuda(const ProgramState &state, float *buffer, cudaStream_t stream)
 {
   float2 c = make_float2(state.c_re, state.c_im);
   float2 offsets = make_float2(state.x_offset, state.y_offset);
@@ -142,16 +142,15 @@ __global__ void compute_normals(const float *__restrict__ const h, float2 *__res
   }
 }
 
-void compute_normals_cuda(float *const h, float *out,
-                          const int height, const int width, cudaStream_t stream)
+void compute_normals_cuda(const ProgramState &state, float *const h, float *out, cudaStream_t stream)
 {
-  unsigned int grid_h = (height + BLOCK_SIZE_NORMALS - 1) / BLOCK_SIZE_NORMALS;
-  unsigned int grid_w = (width + BLOCK_SIZE_NORMALS - 1) / BLOCK_SIZE_NORMALS;
+  unsigned int grid_h = (state.height + BLOCK_SIZE_NORMALS - 1) / BLOCK_SIZE_NORMALS;
+  unsigned int grid_w = (state.width + BLOCK_SIZE_NORMALS - 1) / BLOCK_SIZE_NORMALS;
   dim3 grid_dims{grid_w, grid_h};
   dim3 block_dims{BLOCK_SIZE_NORMALS, BLOCK_SIZE_NORMALS};
 
   float2 *out_f2 = reinterpret_cast<float2 *>(out);
   compute_normals<BLOCK_SIZE_NORMALS, BLOCK_SIZE_NORMALS>
-      <<<grid_dims, block_dims, 0, stream>>>(h, out_f2, height, width);
+      <<<grid_dims, block_dims, 0, stream>>>(h, out_f2, state.height, state.width);
   CUDA_CHECK(cudaGetLastError());
 }

@@ -80,36 +80,6 @@ public:
         updateCameraVectors();
     }
 
-    // processes input received from a mouse input system. Expects the offset value in both the x and y direction.
-    void ProcessMouseMovement(float xoffset, float yoffset)
-    {
-        xoffset *= MouseSensitivity;
-        yoffset *= MouseSensitivity;
-
-        Yaw += xoffset;
-        Pitch -= yoffset;
-
-        if (Pitch > 89.0f)
-            Pitch = 89.0f;
-        if (Pitch < -89.0f)
-            Pitch = -89.0f;
-
-        // update Front, Right and Up Vectors using the updated Euler angles
-        updateCameraVectors();
-    }
-
-    // processes input received from a mouse scroll-wheel event. Only requires input on the vertical wheel-axis
-    void ProcessMouseScroll(float yoffset)
-    {
-        Zoom -= (float)yoffset * Zoom * 0.1;
-        if (Zoom < 0.1f)
-            Zoom = 0.1f;
-        if (Zoom > 45.0f)
-            Zoom = 45.0f;
-
-        updateCameraVectors();
-    }
-
 private:
     // calculates the front vector from the Camera's (updated) Euler Angles
     void updateCameraVectors()
