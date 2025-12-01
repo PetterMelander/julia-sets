@@ -18,14 +18,12 @@
 
 #ifdef WIN32
 #include <windows.h>
-extern "C"
-{
-  __declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
+extern "C" {
+__declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
 }
 #endif
 
-int main()
-{
+int main() {
   // set initial state
   ProgramState state;
   state.width = 2048;
@@ -39,12 +37,11 @@ int main()
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-  
+
   glfwWindowHint(GLFW_SAMPLES, 0);
   GLFWwindow *window_2d =
-  glfwCreateWindow(state.width, state.height, "Julia", NULL, NULL);
-  if (window_2d == NULL)
-  {
+      glfwCreateWindow(state.width, state.height, "Julia", NULL, NULL);
+  if (window_2d == NULL) {
     std::cout << "Failed to create window_2d" << std::endl;
     glfwTerminate();
     return -1;
@@ -52,21 +49,19 @@ int main()
 
   glfwWindowHint(GLFW_SAMPLES, 16);
   GLFWwindow *window_3d =
-  glfwCreateWindow(state.width, state.height, "Julia", NULL, window_2d);
-  if (window_3d == NULL)
-  {
+      glfwCreateWindow(state.width, state.height, "Julia", NULL, window_2d);
+  if (window_3d == NULL) {
     std::cout << "Failed to create window" << std::endl;
     glfwTerminate();
     return -1;
   }
   glfwMakeContextCurrent(window_2d);
-  
-  if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
-  {
+
+  if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
     std::cout << "Failed to initialize GLAD" << std::endl;
     return -1;
   }
-  
+
   // init cuda buffers & streams
   // buffers are used for double precision color mapping
   int raw_dsize = state.width * state.height * sizeof(float);
@@ -89,10 +84,10 @@ int main()
   glBufferData(GL_PIXEL_UNPACK_BUFFER, dsize, 0, GL_DYNAMIC_DRAW);
 
   cudaGraphicsResource *colorCudaPboResources[2];
-  CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&colorCudaPboResources[0], colorPboIds[0],
-                                          cudaGraphicsMapFlagsNone));
-  CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&colorCudaPboResources[1], colorPboIds[1],
-                                          cudaGraphicsMapFlagsNone));
+  CUDA_CHECK(cudaGraphicsGLRegisterBuffer(
+      &colorCudaPboResources[0], colorPboIds[0], cudaGraphicsMapFlagsNone));
+  CUDA_CHECK(cudaGraphicsGLRegisterBuffer(
+      &colorCudaPboResources[1], colorPboIds[1], cudaGraphicsMapFlagsNone));
 
   // init pixel buffers for 3d
   // used directly for single precision
@@ -105,9 +100,11 @@ int main()
   glBufferData(GL_PIXEL_UNPACK_BUFFER, dsize, 0, GL_DYNAMIC_DRAW);
 
   cudaGraphicsResource *smoothCudaPboResources[2];
-  CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&smoothCudaPboResources[0], smoothPboIds[0],
+  CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&smoothCudaPboResources[0],
+                                          smoothPboIds[0],
                                           cudaGraphicsMapFlagsWriteDiscard));
-  CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&smoothCudaPboResources[1], smoothPboIds[1],
+  CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&smoothCudaPboResources[1],
+                                          smoothPboIds[1],
                                           cudaGraphicsMapFlagsWriteDiscard));
 
   // init texture
@@ -140,22 +137,25 @@ int main()
   glGenVertexArrays(1, &VAO_2d);
   glBindVertexArray(VAO_2d);
 
-  float vertices_2d[] = {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, -1.0f, 1.0f, 0.0f,
-                         -1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 1.0f, 0.0f, 1.0f};
+  float vertices_2d[] = {1.0f,  1.0f,  1.0f, 1.0f, 1.0f,  -1.0f, 1.0f, 0.0f,
+                         -1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 1.0f,  0.0f, 1.0f};
   unsigned int VBO_2d;
   glGenBuffers(1, &VBO_2d);
   glBindBuffer(GL_ARRAY_BUFFER, VBO_2d);
-  glBufferData(GL_ARRAY_BUFFER, sizeof(vertices_2d), vertices_2d, GL_STATIC_DRAW);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(vertices_2d), vertices_2d,
+               GL_STATIC_DRAW);
 
   unsigned int indices_2d[] = {0, 1, 3, 1, 2, 3};
   unsigned int EBO_2d;
   glGenBuffers(1, &EBO_2d);
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO_2d);
-  glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices_2d), indices_2d, GL_STATIC_DRAW);
+  glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices_2d), indices_2d,
+               GL_STATIC_DRAW);
 
   glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)0);
   glEnableVertexAttribArray(0);
-  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)(2 * sizeof(float)));
+  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float),
+                        (void *)(2 * sizeof(float)));
   glEnableVertexAttribArray(1);
 
   // init shaders
@@ -185,18 +185,14 @@ int main()
   vertices_3d.reserve(2 * state.width * state.height);
   std::vector<unsigned int> indices_3d;
   indices_3d.reserve(3 * 2 * (state.width - 1) * (state.height - 1));
-  for (int y = 0; y < state.height; ++y)
-  {
-    #pragma omp simd
-    for (int x = 0; x < state.width; ++x)
-    {
+  for (int y = 0; y < state.height; ++y) {
+    for (int x = 0; x < state.width; ++x) {
       vertices_3d.push_back((float)x / (state.width - 1) * 2 - 1);
       vertices_3d.push_back((float)y / (state.height - 1) * 2 - 1);
       vertices_3d.push_back(0.0f);
       vertices_3d.push_back(0.0f);
 
-      if (x < state.width - 1 && y < state.height - 1)
-      {
+      if (x < state.width - 1 && y < state.height - 1) {
         unsigned int i = y * state.width + x;
         indices_3d.push_back(i);
         indices_3d.push_back(i + 1);
@@ -219,32 +215,40 @@ int main()
   glGenBuffers(2, EBOs_3d);
 
   glBindBuffer(GL_ARRAY_BUFFER, VBOs_3d[0]);
-  glBufferData(GL_ARRAY_BUFFER, vertices_3d.size() * sizeof(float), vertices_3d.data(), GL_DYNAMIC_DRAW);
+  glBufferData(GL_ARRAY_BUFFER, vertices_3d.size() * sizeof(float),
+               vertices_3d.data(), GL_DYNAMIC_DRAW);
 
   CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&cudaVboResources[0], VBOs_3d[0],
                                           cudaGraphicsMapFlagsWriteDiscard));
 
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBOs_3d[0]);
-  glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices_3d.size() * sizeof(unsigned int), indices_3d.data(), GL_STATIC_DRAW);
+  glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+               indices_3d.size() * sizeof(unsigned int), indices_3d.data(),
+               GL_STATIC_DRAW);
 
   glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)0);
   glEnableVertexAttribArray(0);
-  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)(2 * sizeof(float)));
+  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float),
+                        (void *)(2 * sizeof(float)));
   glEnableVertexAttribArray(1);
 
   glBindVertexArray(VAOs_3d[1]);
   glBindBuffer(GL_ARRAY_BUFFER, VBOs_3d[1]);
-  glBufferData(GL_ARRAY_BUFFER, vertices_3d.size() * sizeof(float), vertices_3d.data(), GL_DYNAMIC_DRAW);
+  glBufferData(GL_ARRAY_BUFFER, vertices_3d.size() * sizeof(float),
+               vertices_3d.data(), GL_DYNAMIC_DRAW);
 
   CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&cudaVboResources[1], VBOs_3d[1],
                                           cudaGraphicsMapFlagsWriteDiscard));
 
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBOs_3d[1]);
-  glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices_3d.size() * sizeof(unsigned int), indices_3d.data(), GL_STATIC_DRAW);
+  glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+               indices_3d.size() * sizeof(unsigned int), indices_3d.data(),
+               GL_STATIC_DRAW);
 
   glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)0);
   glEnableVertexAttribArray(0);
-  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)(2 * sizeof(float)));
+  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float),
+                        (void *)(2 * sizeof(float)));
   glEnableVertexAttribArray(1);
 
   unsigned int texture_3d;
@@ -254,7 +258,8 @@ int main()
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, state.width, state.height, 0, GL_RED, GL_FLOAT, NULL);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, state.width, state.height, 0, GL_RED,
+               GL_FLOAT, NULL);
 
   // init shaders
   Shader shader_3d("shaders/shader_3d.vs", "shaders/shader_3d.fs");
@@ -275,46 +280,39 @@ int main()
   double r = 2.2;
   double d = 0.3;
 
-  glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)state.width / (float)state.height, 0.1f, 100.0f);
+  glm::mat4 projection =
+      glm::perspective(glm::radians(45.0f),
+                       (float)state.width / (float)state.height, 0.1f, 100.0f);
   glm::mat4 view = state.camera.GetViewMatrix();
 
-  while (!glfwWindowShouldClose(window_2d))
-  {
+  while (!glfwWindowShouldClose(window_2d)) {
     prevFront = state.camera.Front;
     prevView = state.camera.GetViewMatrix();
     update_pan(state, window_2d);
-    process_movement(window_2d, 0.01);
+    process_movement(window_2d, 0.01); // move to 3d window
     update_theta(state, window_2d);
 
-    if (state.needs_redraw)
-    {
+    if (state.needs_redraw) {
       // compute next fractal and display previously computed fractal
-      state.c_re = (R - r) * cos(state.theta) + d * cos((R - r) * state.theta / r);
-      state.c_im = (R - r) * sin(state.theta) - d * sin((R - r) * state.theta / r);
+      state.c_re =
+          (R - r) * cos(state.theta) + d * cos((R - r) * state.theta / r);
+      state.c_im =
+          (R - r) * sin(state.theta) - d * sin((R - r) * state.theta / r);
 
       shader_3d.setVec3("viewPos", prevFront);
 
       bufIdx = (bufIdx + 1) % 2;
       int nextIdx = (bufIdx + 1) % 2;
 
-      if (state.zoomLevel < 10000)
-      {
-        compute_julia_sp(
-            state,
-            colorCudaPboResources[nextIdx],
-            smoothCudaPboResources[nextIdx],
-            cudaVboResources[nextIdx],
-            streams[nextIdx]);
-      }
-      else
-      {
-        compute_julia_dp(
-            state,
-            h_cuda_buffers[nextIdx],
-            colorCudaPboResources[nextIdx],
-            smoothCudaPboResources[nextIdx],
-            cudaVboResources[nextIdx],
-            streams[nextIdx]);
+      if (state.zoomLevel < 10000) {
+        compute_julia_sp(state, colorCudaPboResources[nextIdx],
+                         smoothCudaPboResources[nextIdx],
+                         cudaVboResources[nextIdx], streams[nextIdx]);
+      } else {
+        compute_julia_dp(state, h_cuda_buffers[nextIdx],
+                         colorCudaPboResources[nextIdx],
+                         smoothCudaPboResources[nextIdx],
+                         cudaVboResources[nextIdx], streams[nextIdx]);
       }
       glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
 
@@ -332,12 +330,10 @@ int main()
 
       state.needs_redraw = false;
       needs_texture_switch = true;
-    }
-    else if (needs_texture_switch)
-    {
+    } else if (needs_texture_switch) {
       // if we just paused, render last computed fractal, then stop
       shader_3d.setVec3("viewPos", state.camera.Front);
-      
+
       int nextIdx = (bufIdx + 1) % 2;
 
       // make sure previous fractal is finished before rendering
@@ -354,9 +350,7 @@ int main()
       redraw_image_3d(window_3d, shader_3d, texture_3d, VAOs_3d[nextIdx]);
 
       needs_texture_switch = false;
-    }
-    else
-    {
+    } else {
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 

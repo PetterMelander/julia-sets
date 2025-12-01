@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.18)
+cmake_minimum_required(VERSION 3.24)
 
 project(julia LANGUAGES CXX C CUDA)
 
@@ -13,10 +13,25 @@ else()
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -march=native -fopenmp -ffast-math -funroll-loops -fno-math-errno")
 endif()
 
+if(WIN32)
+    set(NPP_LIBS CUDA::nppif CUDA::nppc)
+
+    include(FetchContent)
+
+    FetchContent_Declare(
+        glm
+        GIT_REPOSITORY https://github.com/g-truc/glm.git
+        GIT_TAG        1.0.2
+    )
+    FetchContent_MakeAvailable(glm)
+else()
+    set(NPP_LIBS CUDA::nppif_static CUDA::nppc_static)
+endif()
+
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O3 --use_fast_math --extra-device-vectorization --ptxas-options=-O3 -lineinfo")
 set(CMAKE_CUDA_STANDARD 17)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
-set(CMAKE_CUDA_ARCHITECTURES 75 89) 
+set(CMAKE_CUDA_ARCHITECTURES 75 89-real 89-virtual) 
 
 find_package(OpenGL REQUIRED)
 find_package(glfw3 CONFIG REQUIRED)
@@ -42,8 +57,8 @@ target_link_libraries(julia_lib PUBLIC
     glfw
     OpenGL::GL 
     CUDA::cudart_static
-    CUDA::nppif_static
-    CUDA::nppc_static
+    ${NPP_LIBS}
+    glm::glm
 )
 
 add_executable(animated src/animated.cpp)
@@ -57,13 +72,12 @@ add_custom_command(TARGET animated POST_BUILD
     COMMENT "Copying shaders to binary directory..."
 )
 
-# add_executable(norm src/test.cpp)
-# target_link_libraries(norm PRIVATE julia_lib glm)
-# set_property(TARGET norm PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
-
-# add_custom_command(TARGET 3d POST_BUILD
-#     COMMAND ${CMAKE_COMMAND} -E copy_directory
-#         ${CMAKE_CURRENT_SOURCE_DIR}/src/shaders
-#         $<TARGET_FILE_DIR:3d>/shaders
-#     COMMENT "Copying shaders to binary directory..."
-# )
+if(WIN32)
+    add_custom_command(TARGET animated POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        $<TARGET_RUNTIME_DLLS:animated>
+        $<TARGET_FILE_DIR:animated>
+        COMMENT "Copying required DLLS"
+        COMMAND_EXPAND_LISTS
+    )
+endif()
