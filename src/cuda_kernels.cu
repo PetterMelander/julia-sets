@@ -1,5 +1,5 @@
 #include "cuda_kernels.cuh"
-#include "gl_utils.h"
+// #include "gl_utils.h"
 
 constexpr int BLOCK_SIZE_JULIA = 16;
 constexpr int BLOCK_SIZE_NORMALS = 32;
@@ -60,16 +60,17 @@ __global__ void julia(float *const __restrict__ buffer, const float range, const
   }
 }
 
-void compute_julia_cuda(const ProgramState &state, float *buffer, cudaStream_t stream)
+void compute_julia_cuda(int width, int height, double c_re, double c_im, double zoomLevel,
+                        double x_offset, double y_offset, float *buffer, cudaStream_t stream)
 {
-  float2 c = make_float2(state.c_re, state.c_im);
-  float2 offsets = make_float2(state.x_offset, state.y_offset);
+  float2 c = make_float2(c_re, c_im);
+  float2 offsets = make_float2(x_offset, y_offset);
 
-  unsigned int n_blocks = (state.width + BLOCK_SIZE_JULIA - 1) / BLOCK_SIZE_JULIA;
+  unsigned int n_blocks = (width + BLOCK_SIZE_JULIA - 1) / BLOCK_SIZE_JULIA;
   dim3 block_dims{BLOCK_SIZE_JULIA, BLOCK_SIZE_JULIA};
   dim3 grid_dims{n_blocks, n_blocks};
-  julia<<<grid_dims, block_dims, 0, stream>>>(buffer, (float)(1.0 / state.zoomLevel),
-                                              offsets, c, state.width, state.height);
+  julia<<<grid_dims, block_dims, 0, stream>>>(buffer, (float)(1.0 / zoomLevel),
+                                              offsets, c, width, height);
   CUDA_CHECK(cudaGetLastError());
 }
 
@@ -142,15 +143,15 @@ __global__ void compute_normals(const float *__restrict__ const h, float2 *__res
   }
 }
 
-void compute_normals_cuda(const ProgramState &state, float *const h, float *out, cudaStream_t stream)
-{
-  unsigned int grid_h = (state.height + BLOCK_SIZE_NORMALS - 1) / BLOCK_SIZE_NORMALS;
-  unsigned int grid_w = (state.width + BLOCK_SIZE_NORMALS - 1) / BLOCK_SIZE_NORMALS;
-  dim3 grid_dims{grid_w, grid_h};
-  dim3 block_dims{BLOCK_SIZE_NORMALS, BLOCK_SIZE_NORMALS};
+// void compute_normals_cuda(const ProgramState &state, float *const h, float *out, cudaStream_t stream)
+// {
+//   unsigned int grid_h = (state.height + BLOCK_SIZE_NORMALS - 1) / BLOCK_SIZE_NORMALS;
+//   unsigned int grid_w = (state.width + BLOCK_SIZE_NORMALS - 1) / BLOCK_SIZE_NORMALS;
+//   dim3 grid_dims{grid_w, grid_h};
+//   dim3 block_dims{BLOCK_SIZE_NORMALS, BLOCK_SIZE_NORMALS};
 
-  float2 *out_f2 = reinterpret_cast<float2 *>(out);
-  compute_normals<BLOCK_SIZE_NORMALS, BLOCK_SIZE_NORMALS>
-      <<<grid_dims, block_dims, 0, stream>>>(h, out_f2, state.height, state.width);
-  CUDA_CHECK(cudaGetLastError());
-}
+//   float2 *out_f2 = reinterpret_cast<float2 *>(out);
+//   compute_normals<BLOCK_SIZE_NORMALS, BLOCK_SIZE_NORMALS>
+//       <<<grid_dims, block_dims, 0, stream>>>(h, out_f2, state.height, state.width);
+//   CUDA_CHECK(cudaGetLastError());
+// }

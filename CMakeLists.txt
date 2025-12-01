@@ -41,7 +41,7 @@ add_library(julia_lib
     vendor/glad/src/glad.c
     src/avx_kernels.cpp
     src/cuda_kernels.cu
-    src/gl_utils.cpp
+    src/window_2d.cpp
 )
 
 target_include_directories(julia_lib PUBLIC
@@ -58,10 +58,10 @@ target_link_libraries(julia_lib PUBLIC
     OpenGL::GL 
     CUDA::cudart_static
     ${NPP_LIBS}
-    glm::glm
+    glm
 )
 
-add_executable(animated src/animated.cpp)
+add_executable(animated src/animated2.cpp)
 target_link_libraries(animated PRIVATE julia_lib)
 set_property(TARGET animated PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
 

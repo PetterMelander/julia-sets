@@ -2,7 +2,7 @@
 
 #include <cstdio>
 
-#include "gl_utils.h"
+// #include "gl_utils.h"
 
 #ifdef NDEBUG
 #define CUDA_CHECK(call) call
@@ -20,5 +20,6 @@
   } while (0)
 #endif
 
-void compute_julia_cuda(const ProgramState &state, float *buffer, cudaStream_t stream);
-void compute_normals_cuda(const ProgramState &state, float *const h, float *out, cudaStream_t stream);
+void compute_julia_cuda(int width, int height, double c_re, double c_im, double zoomLevel,
+                        double x_offset, double y_offset, float *buffer, cudaStream_t stream);
+// void compute_normals_cuda(const ProgramState &state, float *const h, float *out, cudaStream_t stream);

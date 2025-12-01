@@ -5,82 +5,6 @@
 #include "gl_utils.h"
 #include "shader.h"
 
-void framebuffer_size_callback(GLFWwindow *window, int width, int height)
-{
-  glViewport(0, 0, width, height);
-}
-
-void mouse_callback(GLFWwindow *window, double xposIn, double yposIn)
-{
-  ProgramState *state =
-      static_cast<ProgramState *>(glfwGetWindowUserPointer(window));
-
-  state->last_mouse_x = xposIn;
-  state->last_mouse_y = yposIn;
-}
-
-void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
-{
-  ProgramState *state =
-      static_cast<ProgramState *>(glfwGetWindowUserPointer(window));
-
-  double oldZoom = state->zoomLevel;
-  if (yoffset > 0)
-  {
-    state->zoomLevel *= 1.1;
-  }
-  else
-  {
-    state->zoomLevel /= 1.1;
-  }
-
-  double xPos, yPos;
-  glfwGetCursorPos(window, &xPos, &yPos);
-  state->x_offset -=
-      (1.0 - 1.0 / 1.1) * (xPos / state->width - 0.5) * 2.0 / oldZoom;
-  state->y_offset +=
-      (1.0 - 1.0 / 1.1) * (yPos / state->height - 0.5) * 2.0 / oldZoom;
-
-  state->needs_redraw = true;
-}
-
-void mouse_button_callback(GLFWwindow *window, int button, int action,
-                           int mods)
-{
-  ProgramState *state =
-      static_cast<ProgramState *>(glfwGetWindowUserPointer(window));
-
-  if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS)
-  {
-    double xPos, yPos;
-    glfwGetCursorPos(window, &xPos, &yPos);
-    state->tracking_mouse = true;
-    state->last_mouse_x = xPos;
-    state->last_mouse_y = yPos;
-    state->needs_redraw = true;
-  }
-
-  if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE)
-  {
-    state->tracking_mouse = false;
-  }
-}
-
-void key_callback(GLFWwindow *window, int key, int scancode, int action,
-                  int mods)
-{
-  if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
-  {
-    glfwSetWindowShouldClose(window, true);
-  }
-  if (key == GLFW_KEY_SPACE && action == GLFW_PRESS)
-  {
-    ProgramState *state =
-        static_cast<ProgramState *>(glfwGetWindowUserPointer(window));
-    state->paused = !state->paused;
-  }
-}
-
 void update_pan(ProgramState &state, GLFWwindow *window)
 {
   if (state.tracking_mouse) // TODO: incorporate into mouse callback?
@@ -151,7 +75,7 @@ void redraw_image_3d(GLFWwindow *window, Shader &shader, unsigned int texture, u
 
   glBindVertexArray(VAO);
   glDrawElements(GL_TRIANGLES, 3 * 2 * (state->height - 1) * (state->width - 1), GL_UNSIGNED_INT, 0);
-  
+
   glDisable(GL_MULTISAMPLE);
 
   glfwSwapBuffers(window);
@@ -180,7 +104,7 @@ void compute_julia_sp(const ProgramState &state, cudaGraphicsResource *cudaPboCo
   CUDA_CHECK(cudaGraphicsMapResources(1, &cudaVbo, 0));
   CUDA_CHECK(cudaGraphicsResourceGetMappedPointer((void **)&d_vbo, nullptr, cudaVbo));
 
-  compute_julia_cuda(state, d_color_buffer, stream);
+  // compute_julia_cuda(state, d_color_buffer, stream);
 
   // smooth for 3d
   NppiSize size = {state.width, state.height};

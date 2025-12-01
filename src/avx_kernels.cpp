@@ -1,5 +1,5 @@
 #include "avx_kernels.h"
-#include "gl_utils.h"
+// #include "gl_utils.h"
 
 #include <cmath>
 #include <immintrin.h>
@@ -191,8 +191,8 @@ void julia(float *intensities, double range, double x_offset, double y_offset,
   }
 }
 
-void compute_julia_avx(ProgramState state, float *buffer)
-{
-  julia(buffer, 1.0 / state.zoomLevel, state.x_offset, state.y_offset,
-        state.c_re, state.c_im, state.width, state.height);
-}
+// void compute_julia_avx(ProgramState state, float *buffer)
+// {
+//   julia(buffer, 1.0 / state.zoomLevel, state.x_offset, state.y_offset,
+//         state.c_re, state.c_im, state.width, state.height);
+// }

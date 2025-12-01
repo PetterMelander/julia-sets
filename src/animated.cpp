@@ -18,12 +18,14 @@
 
 #ifdef WIN32
 #include <windows.h>
-extern "C" {
-__declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
+extern "C"
+{
+  __declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
 }
 #endif
 
-int main() {
+int main()
+{
   // set initial state
   ProgramState state;
   state.width = 2048;
@@ -34,14 +36,15 @@ int main() {
 
   // init gl and window
   glfwInit();
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
   glfwWindowHint(GLFW_SAMPLES, 0);
   GLFWwindow *window_2d =
       glfwCreateWindow(state.width, state.height, "Julia", NULL, NULL);
-  if (window_2d == NULL) {
+  if (window_2d == NULL)
+  {
     std::cout << "Failed to create window_2d" << std::endl;
     glfwTerminate();
     return -1;
@@ -50,14 +53,16 @@ int main() {
   glfwWindowHint(GLFW_SAMPLES, 16);
   GLFWwindow *window_3d =
       glfwCreateWindow(state.width, state.height, "Julia", NULL, window_2d);
-  if (window_3d == NULL) {
+  if (window_3d == NULL)
+  {
     std::cout << "Failed to create window" << std::endl;
     glfwTerminate();
     return -1;
   }
   glfwMakeContextCurrent(window_2d);
 
-  if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
+  if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
+  {
     std::cout << "Failed to initialize GLAD" << std::endl;
     return -1;
   }
@@ -137,8 +142,8 @@ int main() {
   glGenVertexArrays(1, &VAO_2d);
   glBindVertexArray(VAO_2d);
 
-  float vertices_2d[] = {1.0f,  1.0f,  1.0f, 1.0f, 1.0f,  -1.0f, 1.0f, 0.0f,
-                         -1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 1.0f,  0.0f, 1.0f};
+  float vertices_2d[] = {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, -1.0f, 1.0f, 0.0f,
+                         -1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 1.0f, 0.0f, 1.0f};
   unsigned int VBO_2d;
   glGenBuffers(1, &VBO_2d);
   glBindBuffer(GL_ARRAY_BUFFER, VBO_2d);
@@ -185,14 +190,17 @@ int main() {
   vertices_3d.reserve(2 * state.width * state.height);
   std::vector<unsigned int> indices_3d;
   indices_3d.reserve(3 * 2 * (state.width - 1) * (state.height - 1));
-  for (int y = 0; y < state.height; ++y) {
-    for (int x = 0; x < state.width; ++x) {
+  for (int y = 0; y < state.height; ++y)
+  {
+    for (int x = 0; x < state.width; ++x)
+    {
       vertices_3d.push_back((float)x / (state.width - 1) * 2 - 1);
       vertices_3d.push_back((float)y / (state.height - 1) * 2 - 1);
       vertices_3d.push_back(0.0f);
       vertices_3d.push_back(0.0f);
 
-      if (x < state.width - 1 && y < state.height - 1) {
+      if (x < state.width - 1 && y < state.height - 1)
+      {
         unsigned int i = y * state.width + x;
         indices_3d.push_back(i);
         indices_3d.push_back(i + 1);
@@ -285,14 +293,16 @@ int main() {
                        (float)state.width / (float)state.height, 0.1f, 100.0f);
   glm::mat4 view = state.camera.GetViewMatrix();
 
-  while (!glfwWindowShouldClose(window_2d)) {
+  while (!glfwWindowShouldClose(window_2d))
+  {
     prevFront = state.camera.Front;
     prevView = state.camera.GetViewMatrix();
     update_pan(state, window_2d);
     process_movement(window_2d, 0.01); // move to 3d window
     update_theta(state, window_2d);
 
-    if (state.needs_redraw) {
+    if (state.needs_redraw)
+    {
       // compute next fractal and display previously computed fractal
       state.c_re =
           (R - r) * cos(state.theta) + d * cos((R - r) * state.theta / r);
@@ -304,11 +314,14 @@ int main() {
       bufIdx = (bufIdx + 1) % 2;
       int nextIdx = (bufIdx + 1) % 2;
 
-      if (state.zoomLevel < 10000) {
+      if (state.zoomLevel < 10000)
+      {
         compute_julia_sp(state, colorCudaPboResources[nextIdx],
                          smoothCudaPboResources[nextIdx],
                          cudaVboResources[nextIdx], streams[nextIdx]);
-      } else {
+      }
+      else
+      {
         compute_julia_dp(state, h_cuda_buffers[nextIdx],
                          colorCudaPboResources[nextIdx],
                          smoothCudaPboResources[nextIdx],
@@ -330,14 +343,16 @@ int main() {
 
       state.needs_redraw = false;
       needs_texture_switch = true;
-    } else if (needs_texture_switch) {
+    }
+    else if (needs_texture_switch)
+    {
       // if we just paused, render last computed fractal, then stop
       shader_3d.setVec3("viewPos", state.camera.Front);
 
       int nextIdx = (bufIdx + 1) % 2;
 
       // make sure previous fractal is finished before rendering
-      CUDA_CHECK(cudaStreamSynchronize(streams[bufIdx]));
+      CUDA_CHECK(cudaStreamSynchronize(streams[nextIdx]));
 
       glfwMakeContextCurrent(window_2d);
       switch_texture(state, nextIdx, texture_2d, colorPboIds);
@@ -350,7 +365,9 @@ int main() {
       redraw_image_3d(window_3d, shader_3d, texture_3d, VAOs_3d[nextIdx]);
 
       needs_texture_switch = false;
-    } else {
+    }
+    else
+    {
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 
