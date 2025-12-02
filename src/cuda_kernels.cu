@@ -1,5 +1,4 @@
 #include "cuda_kernels.cuh"
-// #include "gl_utils.h"
 
 constexpr int BLOCK_SIZE_JULIA = 16;
 constexpr int BLOCK_SIZE_NORMALS = 32;

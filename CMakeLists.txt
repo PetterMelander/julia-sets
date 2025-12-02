@@ -61,7 +61,7 @@ target_link_libraries(julia_lib PUBLIC
     glm
 )
 
-add_executable(animated src/animated2.cpp)
+add_executable(animated src/2d.cpp)
 target_link_libraries(animated PRIVATE julia_lib)
 set_property(TARGET animated PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
 

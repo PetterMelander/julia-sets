@@ -2,8 +2,6 @@
 
 #include <cstdio>
 
-// #include "gl_utils.h"
-
 #ifdef NDEBUG
 #define CUDA_CHECK(call) call
 #else

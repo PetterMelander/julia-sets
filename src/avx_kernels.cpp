@@ -1,5 +1,4 @@
 #include "avx_kernels.h"
-// #include "gl_utils.h"
 
 #include <cmath>
 #include <immintrin.h>
@@ -11,15 +10,13 @@ constexpr double R_d = 2.0;
 constexpr int VEC_SIZE_SP = 16;
 constexpr int VEC_SIZE_DP = 8;
 
-__m512 evaluate(__m512 z_re, __m512 z_im, __m512 c_re, __m512 c_im)
-{
+__m512 evaluate(__m512 z_re, __m512 z_im, __m512 c_re, __m512 c_im) {
   __m512 R2 = _mm512_set1_ps(R_s * R_s);
   __mmask16 active = 0xFFFF;
   __m512 escape_iter = _mm512_set1_ps(MAX_ITERS);
   __m512 escape_abs2 = _mm512_set1_ps(0);
 
-  for (int i = 0; i < MAX_ITERS; ++i)
-  {
+  for (int i = 0; i < MAX_ITERS; ++i) {
 
     // compute squared magnitude of z
     __m512 z_re2 = _mm512_mul_ps(z_re, z_re);
@@ -51,8 +48,7 @@ __m512 evaluate(__m512 z_re, __m512 z_im, __m512 c_re, __m512 c_im)
   // let compiler auto vectorize log function since it is not avx intrinsic
   alignas(64) float temp[VEC_SIZE_SP];
   _mm512_store_ps(temp, smoothing);
-  for (int i = 0; i < VEC_SIZE_SP; ++i)
-  {
+  for (int i = 0; i < VEC_SIZE_SP; ++i) {
     temp[i] = logf(logf(temp[i]));
   }
   smoothing = _mm512_load_ps(temp);
@@ -60,19 +56,18 @@ __m512 evaluate(__m512 z_re, __m512 z_im, __m512 c_re, __m512 c_im)
   __m512 neg_inv_log2 = _mm512_set1_ps(-1.f / logf(2));
   __m512 one = _mm512_set1_ps(1.f);
   smoothing = _mm512_fmadd_ps(smoothing, neg_inv_log2, one);
-  escape_iter = _mm512_mask_add_ps(escape_iter, ~active, escape_iter, smoothing);
+  escape_iter =
+      _mm512_mask_add_ps(escape_iter, ~active, escape_iter, smoothing);
   return escape_iter;
 }
 
-__m512d evaluate(__m512d z_re, __m512d z_im, __m512d c_re, __m512d c_im)
-{
+__m512d evaluate(__m512d z_re, __m512d z_im, __m512d c_re, __m512d c_im) {
   __m512d R2 = _mm512_set1_pd(R_d * R_d);
   __mmask8 active = 0xFF;
   __m512d escape_iter = _mm512_set1_pd(MAX_ITERS);
   __m512d escape_abs2 = _mm512_set1_pd(0);
 
-  for (int i = 0; i < MAX_ITERS; ++i)
-  {
+  for (int i = 0; i < MAX_ITERS; ++i) {
 
     // compute squared magnitude of z
     __m512d z_re2 = _mm512_mul_pd(z_re, z_re);
@@ -104,8 +99,7 @@ __m512d evaluate(__m512d z_re, __m512d z_im, __m512d c_re, __m512d c_im)
   // let compiler auto vectorize log function since it is not avx intrinsic
   alignas(64) double temp[VEC_SIZE_DP];
   _mm512_store_pd(temp, smoothing);
-  for (int i = 0; i < VEC_SIZE_DP; ++i)
-  {
+  for (int i = 0; i < VEC_SIZE_DP; ++i) {
     temp[i] = log(log(temp[i]));
   }
   smoothing = _mm512_load_pd(temp);
@@ -113,13 +107,13 @@ __m512d evaluate(__m512d z_re, __m512d z_im, __m512d c_re, __m512d c_im)
   __m512d neg_inv_log2 = _mm512_set1_pd(-1.0 / log(2.0));
   __m512d one = _mm512_set1_pd(1.0);
   smoothing = _mm512_fmadd_pd(smoothing, neg_inv_log2, one);
-  escape_iter = _mm512_mask_add_pd(escape_iter, ~active, escape_iter, smoothing);
+  escape_iter =
+      _mm512_mask_add_pd(escape_iter, ~active, escape_iter, smoothing);
   return escape_iter;
 }
 
-void julia(unsigned char *intensities, float range, float x_offset, float y_offset,
-           float c_re, float c_im, int width, int height)
-{
+void julia(unsigned char *intensities, float range, float x_offset,
+           float y_offset, float c_re, float c_im, int width, int height) {
 
   // vectorize c
   __m512 c_re_vec = _mm512_set1_ps(c_re);
@@ -133,14 +127,12 @@ void julia(unsigned char *intensities, float range, float x_offset, float y_offs
   __m512 index_vec = _mm512_cvtepi32_ps(index_ivec);
 
 #pragma omp parallel for schedule(dynamic)
-  for (int y = 0; y < height; ++y)
-  {
+  for (int y = 0; y < height; ++y) {
     // vectorize imaginary part (const across vector)
     float im = ((float)y / (height - 1)) * range * 2 - range - y_offset;
     __m512 z_im_vec = _mm512_set1_ps(im);
 
-    for (int x = 0; x < width; x += VEC_SIZE_SP)
-    {
+    for (int x = 0; x < width; x += VEC_SIZE_SP) {
       // vectorize real part (16 consecutive pixels in a row)
       float re = ((float)x / (width - 1)) * range * 2 - range - x_offset;
       __m512 z_re_vec = _mm512_set1_ps(re);
@@ -154,8 +146,7 @@ void julia(unsigned char *intensities, float range, float x_offset, float y_offs
 }
 
 void julia(float *intensities, double range, double x_offset, double y_offset,
-           double c_re, double c_im, int width, int height)
-{
+           double c_re, double c_im, int width, int height) {
 
   // vectorize c
   __m512d c_re_vec = _mm512_set1_pd(c_re);
@@ -168,14 +159,12 @@ void julia(float *intensities, double range, double x_offset, double y_offset,
   __m512d index_vec = _mm512_cvtepi64_pd(index_ivec);
 
 #pragma omp parallel for schedule(dynamic, 1)
-  for (int y = 0; y < height; ++y)
-  {
+  for (int y = 0; y < height; ++y) {
     // vectorize imaginary part (const across vector)
     double im = ((double)y / (height - 1)) * range * 2 - range - y_offset;
     __m512d z_im_vec = _mm512_set1_pd(im);
 
-    for (int x = 0; x < width; x += VEC_SIZE_DP)
-    {
+    for (int x = 0; x < width; x += VEC_SIZE_DP) {
       // vectorize real part (8 consecutive pixels in a row)
       double re = ((double)x / (width - 1)) * range * 2 - range - x_offset;
       __m512d z_re_vec = _mm512_set1_pd(re);
@@ -191,8 +180,8 @@ void julia(float *intensities, double range, double x_offset, double y_offset,
   }
 }
 
-// void compute_julia_avx(ProgramState state, float *buffer)
-// {
-//   julia(buffer, 1.0 / state.zoomLevel, state.x_offset, state.y_offset,
-//         state.c_re, state.c_im, state.width, state.height);
-// }
+void compute_julia_avx(int width, int height, double c_re, double c_im,
+                       double zoomLevel, double x_offset, double y_offset,
+                       float *buffer) {
+  julia(buffer, 1.0 / zoomLevel, x_offset, y_offset, c_re, c_im, width, height);
+}
