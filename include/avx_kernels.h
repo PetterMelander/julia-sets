@@ -1,5 +1,7 @@
 #pragma once
 
-#include "gl_utils.h"
+#include <complex>
 
-void compute_julia_avx(ProgramState state, float *buffer);
+void computeJuliaAvx(int width, int height, std::complex<double> c,
+                     double zoomLevel, double xOffset, double yOffset,
+                     float* buffer);

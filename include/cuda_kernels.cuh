@@ -1,7 +1,7 @@
 #pragma once
 
+#include <complex>
 #include <cstdio>
-#include "gl_utils.h"
 
 #ifdef NDEBUG
 #define CUDA_CHECK(call) call
@@ -19,5 +19,6 @@
   } while (0)
 #endif
 
-void compute_julia_cuda(ProgramState state, unsigned char *buffer, cudaStream_t stream);
-void map_colors_cuda(unsigned char *__restrict__ buffer, const float *__restrict__ intensities, const int dsize, cudaStream_t stream);
+void computeJuliaCuda(int width, int height, std::complex<double> c, double zoomLevel,
+                        double xOffset, double yOffset, float *buffer, cudaStream_t stream);
+void computeNormalsCuda(int width, int height, float *const h, float *out, cudaStream_t stream);
