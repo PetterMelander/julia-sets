@@ -4,8 +4,8 @@ layout (location = 1) in vec2 aNorm;
 
 uniform mat4 lookAt;
 uniform sampler2D texture2;
-uniform float xstep;
-uniform float ystep;
+uniform float xstep; // TODO: make constant?
+uniform float ystep; // TODO: make constant?
 
 out float vIntensity;
 out vec3 vNorm;

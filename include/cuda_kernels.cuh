@@ -1,5 +1,6 @@
 #pragma once
 
+#include <complex>
 #include <cstdio>
 
 #ifdef NDEBUG
@@ -18,6 +19,6 @@
   } while (0)
 #endif
 
-void compute_julia_cuda(int width, int height, double c_re, double c_im, double zoomLevel,
-                        double x_offset, double y_offset, float *buffer, cudaStream_t stream);
-// void compute_normals_cuda(const ProgramState &state, float *const h, float *out, cudaStream_t stream);
+void computeJuliaCuda(int width, int height, std::complex<double> c, double zoomLevel,
+                        double xOffset, double yOffset, float *buffer, cudaStream_t stream);
+void computeNormalsCuda(int width, int height, float *const h, float *out, cudaStream_t stream);

@@ -14,45 +14,47 @@
 
 #ifdef WIN32
 #include <windows.h>
-extern "C" {
-__declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
+extern "C"
+{
+  __declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
 }
 #endif
 
 // TODO: place in other file
-void compute_julia_sp_2d(Window2D &window, cudaGraphicsResource *cudaPbo,
-                         cudaStream_t stream) {
-  float *d_color_buffer = nullptr;
+void computeJulia_sp_2d(Window2D &window, cudaGraphicsResource *cudaPbo,
+                         cudaStream_t stream)
+{
+  float *dTexBuffer = nullptr;
   CUDA_CHECK(cudaGraphicsMapResources(1, &cudaPbo, 0));
-  CUDA_CHECK(cudaGraphicsResourceGetMappedPointer((void **)&d_color_buffer,
-                                                  nullptr, cudaPbo));
+  CUDA_CHECK(cudaGraphicsResourceGetMappedPointer((void **)&dTexBuffer, nullptr, cudaPbo));
 
-  compute_julia_cuda(window.width, window.height, window.c_re, window.c_im,
-                     window.zoomLevel, window.x_offset, window.y_offset,
-                     d_color_buffer, stream);
+  computeJuliaCuda(window.width, window.height, window.c,
+                     window.zoomLevel, window.xOffset, window.yOffset,
+                     dTexBuffer, stream);
 
   CUDA_CHECK(cudaGraphicsUnmapResources(1, &cudaPbo, stream));
 };
 
-void compute_julia_dp_2d(Window2D &window, float *h_cuda_buffer,
-                         cudaGraphicsResource *cudaPbo, cudaStream_t stream) {
-  float *d_color_buffer = nullptr;
+void computeJulia_dp_2d(Window2D &window, float *h_cuda_buffer,
+                         cudaGraphicsResource *cudaPbo, cudaStream_t stream)
+{
+  float *dTexBuffer = nullptr;
   CUDA_CHECK(cudaGraphicsMapResources(1, &cudaPbo, 0));
-  CUDA_CHECK(cudaGraphicsResourceGetMappedPointer((void **)&d_color_buffer,
-                                                  nullptr, cudaPbo));
+  CUDA_CHECK(cudaGraphicsResourceGetMappedPointer((void **)&dTexBuffer, nullptr, cudaPbo));
 
   // compute the new julia set into 2d texture
-  compute_julia_avx(window.width, window.height, window.c_re, window.c_im,
-                    window.zoomLevel, window.x_offset, window.y_offset,
+  computeJuliaAvx(window.width, window.height, window.c,
+                    window.zoomLevel, window.xOffset, window.yOffset,
                     h_cuda_buffer);
-  CUDA_CHECK(cudaMemcpyAsync(d_color_buffer, h_cuda_buffer,
+  CUDA_CHECK(cudaMemcpyAsync(dTexBuffer, h_cuda_buffer,
                              window.width * window.height * sizeof(float),
                              cudaMemcpyHostToDevice, stream));
 
   CUDA_CHECK(cudaGraphicsUnmapResources(1, &cudaPbo, stream));
 }
 
-int main() {
+int main()
+{
   int width = 2048;
   int height = 2048;
 
@@ -65,33 +67,38 @@ int main() {
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-  Window2D window_2d = Window2D(width, height);
+  Window2D window2d = Window2D(width, height);
 
-  cudaStream_t streams[2];
-  CUDA_CHECK(cudaStreamCreate(&streams[0]));
-  CUDA_CHECK(cudaStreamCreate(&streams[1]));
+  while (!glfwWindowShouldClose(window2d.windowPtr))
+  {
+    window2d.updateState();
 
-  while (!glfwWindowShouldClose(window_2d.window_ptr)) {
-    window_2d.update_state();
-
-    if (window_2d.needs_redraw) {
-      int nextIdx = window_2d.getNextBufferIndex();
-      if (window_2d.zoomLevel < 10000) {
-        compute_julia_sp_2d(window_2d, window_2d.cudaPboResources[nextIdx],
-                            streams[nextIdx]);
-      } else {
-        compute_julia_dp_2d(window_2d, window_2d.h_cuda_buffers[nextIdx],
-                            window_2d.cudaPboResources[nextIdx],
-                            streams[nextIdx]);
+    if (window2d.needsRedraw)
+    {
+      window2d.switchBuffer();
+      int nextBufferIdx = window2d.getNextBufferIndex();
+      if (window2d.zoomLevel < 10000)
+      {
+        computeJulia_sp_2d(window2d, window2d.cudaPboResources[nextBufferIdx],
+                            window2d.streams[nextBufferIdx]);
+      }
+      else
+      {
+        computeJulia_dp_2d(window2d, window2d.hCudaBuffers[nextBufferIdx],
+                            window2d.cudaPboResources[nextBufferIdx],
+                            window2d.streams[nextBufferIdx]);
       }
 
-      CUDA_CHECK(cudaStreamSynchronize(streams[window_2d.active_buffer]));
-      window_2d.redraw();
-    } else if (window_2d.needs_texture_switch) {
-      int nextIdx = window_2d.getNextBufferIndex();
-      CUDA_CHECK(cudaStreamSynchronize(streams[nextIdx]));
-      window_2d.redraw();
-    } else {
+      window2d.redraw();
+    }
+    else if (window2d.needsTextureSwitch)
+    {
+      window2d.switchBuffer();
+      window2d.redraw();
+      window2d.switchBuffer();
+    }
+    else
+    {
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 

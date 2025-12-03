@@ -19,15 +19,15 @@ __device__ float evaluate(float2 z, const float2 c)
   constexpr int MAX_ITERS = 1000;
   constexpr float R = 2.0f;
 
-  float escape_iter = MAX_ITERS;
-  float escape_abs2 = 0;
+  float escapeIter = MAX_ITERS;
+  float escapeAbs2 = 0;
   for (int i = 0; i < MAX_ITERS; ++i)
   {
     float abs2 = z.x * z.x + z.y * z.y;
     if (abs2 >= R * R)
     {
-      escape_iter = i;
-      escape_abs2 = abs2;
+      escapeIter = i;
+      escapeAbs2 = abs2;
       break;
     }
     float re = z.x * z.x - z.y * z.y + c.x;
@@ -35,9 +35,9 @@ __device__ float evaluate(float2 z, const float2 c)
     z.x = re;
     z.y = im;
   }
-  if (escape_iter < MAX_ITERS)
+  if (escapeIter < MAX_ITERS)
   {
-    return escape_iter + 1 - __logf(__logf(__fsqrt_rn(escape_abs2))) / logf(2);
+    return escapeIter + 1 - __logf(__logf(__fsqrt_rn(escapeAbs2))) / logf(2);
   }
   return MAX_ITERS;
 }
@@ -45,31 +45,31 @@ __device__ float evaluate(float2 z, const float2 c)
 __global__ void julia(float *const __restrict__ buffer, const float range, const float2 offsets,
                       const float2 c, const int width, const int height)
 {
-  int x_idx = blockIdx.x * blockDim.x + threadIdx.x;
-  int y_idx = blockIdx.y * blockDim.y + threadIdx.y;
+  int xIdx = blockIdx.x * blockDim.x + threadIdx.x;
+  int yIdx = blockIdx.y * blockDim.y + threadIdx.y;
 
-  if (x_idx < width && y_idx < height)
+  if (xIdx < width && yIdx < height)
   {
-    float re = ((float)x_idx / (width - 1)) * range * 2 - range - offsets.x;
-    float im = ((float)y_idx / (height - 1)) * range * 2 - range - offsets.y;
+    float re = ((float)xIdx / (width - 1)) * range * 2 - range - offsets.x;
+    float im = ((float)yIdx / (height - 1)) * range * 2 - range - offsets.y;
     float2 z{re, im};
 
     float intensity = evaluate(z, c);
-    buffer[y_idx * width + x_idx] = intensity;
+    buffer[yIdx * width + xIdx] = intensity;
   }
 }
 
-void compute_julia_cuda(int width, int height, double c_re, double c_im, double zoomLevel,
-                        double x_offset, double y_offset, float *buffer, cudaStream_t stream)
+void computeJuliaCuda(int width, int height, std::complex<double> c, double zoomLevel,
+                        double xOffset, double yOffset, float *buffer, cudaStream_t stream)
 {
-  float2 c = make_float2(c_re, c_im);
-  float2 offsets = make_float2(x_offset, y_offset);
+  float2 C = make_float2(c.real(), c.imag());
+  float2 offsets = make_float2(xOffset, yOffset);
 
-  unsigned int n_blocks = (width + BLOCK_SIZE_JULIA - 1) / BLOCK_SIZE_JULIA;
-  dim3 block_dims{BLOCK_SIZE_JULIA, BLOCK_SIZE_JULIA};
-  dim3 grid_dims{n_blocks, n_blocks};
-  julia<<<grid_dims, block_dims, 0, stream>>>(buffer, (float)(1.0 / zoomLevel),
-                                              offsets, c, width, height);
+  unsigned int NumBlocks = (width + BLOCK_SIZE_JULIA - 1) / BLOCK_SIZE_JULIA;
+  dim3 blockDims{BLOCK_SIZE_JULIA, BLOCK_SIZE_JULIA};
+  dim3 gridDims{NumBlocks, NumBlocks};
+  julia<<<gridDims, blockDims, 0, stream>>>(buffer, (float)(1.0 / zoomLevel),
+                                              offsets, C, width, height);
   CUDA_CHECK(cudaGetLastError());
 }
 
@@ -77,13 +77,46 @@ template <int BLOCK_H, int BLOCK_W>
 __global__ void compute_normals(const float *__restrict__ const h, float2 *__restrict__ out,
                                 const int height, const int width)
 {
+  /*
+  This kernel requires some explanation. It computes the normal for each vertex as the area weighted
+  average of all 6 triangles it belongs to.
+
+  Since the x and z values (here called x and y) are a constant grid, the normals really only
+  depend on the y values (here called h). If xstep is the difference in x between two horizontally
+  adjacent vertices and ystep is the difference in y between two vertically adjacent vertices, then
+  the normal for a TOP triangle (upper right half of a rectangle) is the following:
+
+  (
+    ystep * (h00 - h10),
+    xstep * ystep,
+    xstep * (h10 - h11)
+  )
+
+  and for a BOTTOM triangle:
+
+  (
+    ystep * (h01 - h11),
+    xstep * ystep,
+    xstep * (h00 - h01)
+  ),
+
+  where h00 is the top left corner of the triangle, and in clockwise direction, the remaining
+  corners are h10, h11, and h01.
+
+  To reduce memory bandwidth usage, the constant y coordinate is not written to global memory. It is
+  instead left to the vertex shader to compute. Similarly, the constants ystep and xstep from the
+  x and z coordinates are left to the vertex shader to compute.
+
+  The height values are transformed to produce more visually appealing shapes. This transform must
+  match the transform also applied in the vertex shader.
+  */
   constexpr int HALO = 1;
   constexpr int TILE_H = BLOCK_H + 2 * HALO;
   constexpr int TILE_W = BLOCK_W + 2 * HALO;
   constexpr int NUM_THREADS = BLOCK_H * BLOCK_W;
 
-  int x_idx = BLOCK_W * blockIdx.x + threadIdx.x;
-  int y_idx = BLOCK_H * blockIdx.y + threadIdx.y;
+  int xIdx = BLOCK_W * blockIdx.x + threadIdx.x;
+  int yIdx = BLOCK_H * blockIdx.y + threadIdx.y;
 
   int tx = threadIdx.x;
   int ty = threadIdx.y;
@@ -92,16 +125,16 @@ __global__ void compute_normals(const float *__restrict__ const h, float2 *__res
 
   // load h tile to smem
   int tid = threadIdx.y * BLOCK_W + threadIdx.x;
-  int tile_top_left_x = blockIdx.x * BLOCK_W - HALO;
-  int tile_top_left_y = blockIdx.y * BLOCK_H - HALO;
+  int tileTopLeftX = blockIdx.x * BLOCK_W - HALO;
+  int tileTopLeftY = blockIdx.y * BLOCK_H - HALO;
 
   for (int i = tid; i < TILE_H * TILE_W; i += NUM_THREADS)
   {
     int ly = i / TILE_W; // div and mod are optimized away because constexpr
     int lx = i % TILE_W;
 
-    int gy = tile_top_left_y + ly;
-    int gx = tile_top_left_x + lx;
+    int gy = tileTopLeftY + ly;
+    int gx = tileTopLeftX + lx;
 
     if (gx >= 0 && gx < width && gy >= 0 && gy < height)
       s_h[ly][lx] = __fsqrt_rz(__fsqrt_rz(h[gy * width + gx])) * 0.075f; // TODO: decide
@@ -126,7 +159,7 @@ __global__ void compute_normals(const float *__restrict__ const h, float2 *__res
     return float2{h01 - h11, h00 - h01};
   };
 
-  if (x_idx < width && y_idx < height)
+  if (xIdx < width && yIdx < height)
   {
     // accumulate normals
     int sx = tx + HALO;
@@ -138,19 +171,19 @@ __global__ void compute_normals(const float *__restrict__ const h, float2 *__res
     myNormal += getUpperNormal(sx - 1, sy);
     myNormal += getLowerNormal(sx, sy - 1);
 
-    out[2 * (y_idx * width + x_idx) + 1] = myNormal;
+    out[2 * (yIdx * width + xIdx) + 1] = myNormal;
   }
 }
 
-// void compute_normals_cuda(const ProgramState &state, float *const h, float *out, cudaStream_t stream)
-// {
-//   unsigned int grid_h = (state.height + BLOCK_SIZE_NORMALS - 1) / BLOCK_SIZE_NORMALS;
-//   unsigned int grid_w = (state.width + BLOCK_SIZE_NORMALS - 1) / BLOCK_SIZE_NORMALS;
-//   dim3 grid_dims{grid_w, grid_h};
-//   dim3 block_dims{BLOCK_SIZE_NORMALS, BLOCK_SIZE_NORMALS};
+void computeNormalsCuda(int width, int height, float *const h, float *out, cudaStream_t stream)
+{
+  unsigned int gridHeight = (height + BLOCK_SIZE_NORMALS - 1) / BLOCK_SIZE_NORMALS;
+  unsigned int gridWidth = (width + BLOCK_SIZE_NORMALS - 1) / BLOCK_SIZE_NORMALS;
+  dim3 gridDims{gridWidth, gridHeight};
+  dim3 blockDims{BLOCK_SIZE_NORMALS, BLOCK_SIZE_NORMALS};
 
-//   float2 *out_f2 = reinterpret_cast<float2 *>(out);
-//   compute_normals<BLOCK_SIZE_NORMALS, BLOCK_SIZE_NORMALS>
-//       <<<grid_dims, block_dims, 0, stream>>>(h, out_f2, state.height, state.width);
-//   CUDA_CHECK(cudaGetLastError());
-// }
+  float2 *out_f2 = reinterpret_cast<float2 *>(out);
+  compute_normals<BLOCK_SIZE_NORMALS, BLOCK_SIZE_NORMALS>
+      <<<gridDims, blockDims, 0, stream>>>(h, out_f2, height, width);
+  CUDA_CHECK(cudaGetLastError());
+}

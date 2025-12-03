@@ -42,6 +42,7 @@ add_library(julia_lib
     src/avx_kernels.cpp
     src/cuda_kernels.cu
     src/window_2d.cpp
+    src/window_3d.cpp
 )
 
 target_include_directories(julia_lib PUBLIC
@@ -61,22 +62,43 @@ target_link_libraries(julia_lib PUBLIC
     glm
 )
 
-add_executable(animated src/2d.cpp)
-target_link_libraries(animated PRIVATE julia_lib)
-set_property(TARGET animated PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+add_executable(3d src/3d.cpp)
+target_link_libraries(3d PRIVATE julia_lib)
+set_property(TARGET 3d PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
 
-add_custom_command(TARGET animated POST_BUILD
+add_custom_command(TARGET 3d POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         ${CMAKE_CURRENT_SOURCE_DIR}/src/shaders
-        $<TARGET_FILE_DIR:animated>/shaders
+        $<TARGET_FILE_DIR:3d>/shaders
     COMMENT "Copying shaders to binary directory..."
 )
 
 if(WIN32)
-    add_custom_command(TARGET animated POST_BUILD
+    add_custom_command(TARGET 3d POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        $<TARGET_RUNTIME_DLLS:animated>
-        $<TARGET_FILE_DIR:animated>
+        $<TARGET_RUNTIME_DLLS:3d>
+        $<TARGET_FILE_DIR:3d>
+        COMMENT "Copying required DLLS"
+        COMMAND_EXPAND_LISTS
+    )
+endif()
+
+add_executable(2d src/2d.cpp)
+target_link_libraries(2d PRIVATE julia_lib)
+set_property(TARGET 2d PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+
+add_custom_command(TARGET 2d POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/shaders
+        $<TARGET_FILE_DIR:2d>/shaders
+    COMMENT "Copying shaders to binary directory..."
+)
+
+if(WIN32)
+    add_custom_command(TARGET 2d POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        $<TARGET_RUNTIME_DLLS:2d>
+        $<TARGET_FILE_DIR:2d>
         COMMENT "Copying required DLLS"
         COMMAND_EXPAND_LISTS
     )

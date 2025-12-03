@@ -16,7 +16,8 @@
 
 void APIENTRY glDebugOutput(GLenum source, GLenum type, unsigned int id,
                             GLenum severity, GLsizei length,
-                            const char *message, const void *userParam) {
+                            const char *message, const void *userParam)
+{
   // Ignore non-significant error/warning codes
   if (id == 131169 || id == 131185 || id == 131218 || id == 131204)
     return;
@@ -24,7 +25,8 @@ void APIENTRY glDebugOutput(GLenum source, GLenum type, unsigned int id,
   std::cout << "---------------" << std::endl;
   std::cout << "Debug message (" << id << "): " << message << std::endl;
 
-  switch (source) {
+  switch (source)
+  {
   case GL_DEBUG_SOURCE_API:
     std::cout << "Source: API";
     break;
@@ -46,7 +48,8 @@ void APIENTRY glDebugOutput(GLenum source, GLenum type, unsigned int id,
   }
   std::cout << std::endl;
 
-  switch (type) {
+  switch (type)
+  {
   case GL_DEBUG_TYPE_ERROR:
     std::cout << "Type: Error";
     break;
@@ -80,7 +83,8 @@ void APIENTRY glDebugOutput(GLenum source, GLenum type, unsigned int id,
   std::cout << "---------------" << std::endl;
 }
 
-Window2D::Window2D(int width, int height) : width(width), height(height) {
+Window2D::Window2D(int width, int height) : width(width), height(height)
+{
 
   // create window
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
@@ -92,21 +96,24 @@ Window2D::Window2D(int width, int height) : width(width), height(height) {
   glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, true);
 #endif
 
-  window_ptr = glfwCreateWindow(width, height, "Julia", NULL, NULL);
-  if (window_ptr == NULL) {
+  windowPtr = glfwCreateWindow(width, height, "Julia", NULL, NULL);
+  if (windowPtr == NULL)
+  {
     std::cout << "Failed to create 2D window" << std::endl;
     glfwTerminate();
   }
-  glfwMakeContextCurrent(window_ptr);
+  glfwMakeContextCurrent(windowPtr);
 
-  if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
+  if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
+  {
     std::cout << "Failed to initialize GLAD" << std::endl;
   }
 
 #ifdef NDEBUG
   int flags;
   glGetIntegerv(GL_CONTEXT_FLAGS, &flags);
-  if (flags & GL_CONTEXT_FLAG_DEBUG_BIT) {
+  if (flags & GL_CONTEXT_FLAG_DEBUG_BIT)
+  {
     glEnable(GL_DEBUG_OUTPUT);
     glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS); // Makes sure errors are displayed at
                                            // the moment they happen
@@ -117,14 +124,16 @@ Window2D::Window2D(int width, int height) : width(width), height(height) {
 #endif
 
   // allocate buffers, texture, etc.
-  int dsize = width * height * sizeof(float);
+  int dSize = width * height * sizeof(float);
   glGenBuffers(2, pboIds);
-  for (int i = 0; i < 2; ++i) {
+  for (int i = 0; i < 2; ++i)
+  {
+    CUDA_CHECK(cudaStreamCreate(&streams[i]));
 
-    cudaMallocHost(&h_cuda_buffers[i], dsize);
+    CUDA_CHECK(cudaMallocHost(&hCudaBuffers[i], dSize));
 
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pboIds[i]);
-    glBufferData(GL_PIXEL_UNPACK_BUFFER, dsize, 0, GL_DYNAMIC_DRAW);
+    glBufferData(GL_PIXEL_UNPACK_BUFFER, dSize, 0, GL_DYNAMIC_DRAW);
 
     CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&cudaPboResources[i], pboIds[i],
                                             cudaGraphicsMapFlagsNone));
@@ -140,8 +149,8 @@ Window2D::Window2D(int width, int height) : width(width), height(height) {
   glGenVertexArrays(1, &vao);
   glBindVertexArray(vao);
 
-  float vertices[] = {1.0f,  1.0f,  1.0f, 1.0f, 1.0f,  -1.0f, 1.0f, 0.0f,
-                      -1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 1.0f,  0.0f, 1.0f};
+  float vertices[] = {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, -1.0f, 1.0f, 0.0f,
+                      -1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 1.0f, 0.0f, 1.0f};
   glGenBuffers(1, &vbo);
   glBindBuffer(GL_ARRAY_BUFFER, vbo);
   glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
@@ -160,23 +169,24 @@ Window2D::Window2D(int width, int height) : width(width), height(height) {
 
   // set window parameters and callbacks
   glfwSwapInterval(0);
-  glfwSetWindowUserPointer(window_ptr, this);
+  glfwSetWindowUserPointer(windowPtr, this);
 
   glViewport(0, 0, width, height);
   glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
-  glfwSetScrollCallback(window_ptr, scroll_callback);
-  glfwSetMouseButtonCallback(window_ptr, mouse_button_callback);
-  glfwSetKeyCallback(window_ptr, key_callback);
-  glfwSetFramebufferSizeCallback(window_ptr, framebuffer_size_callback);
+  glfwSetScrollCallback(windowPtr, scrollCallback);
+  glfwSetMouseButtonCallback(windowPtr, mouseButtonCallback);
+  glfwSetKeyCallback(windowPtr, keyCallback);
+  glfwSetFramebufferSizeCallback(windowPtr, framebufferSizeCallback);
 
   // init shader
-  shader = std::make_unique<Shader>("shaders/shader.vs", "shaders/shader.fs");
+  shader = std::make_unique<Shader>("shaders/shader_2d.vs", "shaders/shader_2d.fs");
   shader->use();
   shader->setInt("texture1", 0);
 }
 
-Window2D::~Window2D() {
-  cudaFreeHost(h_cuda_buffers[0]);
-  cudaFreeHost(h_cuda_buffers[1]);
+Window2D::~Window2D()
+{
+  cudaFreeHost(hCudaBuffers[0]);
+  cudaFreeHost(hCudaBuffers[1]);
 }
