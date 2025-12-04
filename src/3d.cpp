@@ -23,8 +23,9 @@ extern "C"
 #endif
 
 // TODO: place in other file
-void computeJulia_sp_3d(Window2D &window, cudaGraphicsResource *cudaPbo2d, cudaGraphicsResource *cudaPbo3d,
-                         cudaGraphicsResource *cudaVbo3d, cudaStream_t stream)
+void computeJulia_sp_3d(Window2D &window, cudaGraphicsResource *cudaPbo2d,
+                        cudaGraphicsResource *cudaPbo3d, cudaGraphicsResource *cudaVbo3d,
+                        cudaStream_t stream)
 {
   float *dTexBuffer2d = nullptr;
   CUDA_CHECK(cudaGraphicsMapResources(1, &cudaPbo2d, 0));
@@ -56,7 +57,7 @@ void computeJulia_sp_3d(Window2D &window, cudaGraphicsResource *cudaPbo2d, cudaG
   CUDA_CHECK(cudaGraphicsUnmapResources(1, &cudaVbo3d, stream));
 };
 
-void computeJulia_dp_3d(Window2D &window, float *h_cuda_buffer,
+void computeJulia_dp_3d(Window2D &window, float *hCudaBuffer,
                          cudaGraphicsResource *cudaPbo2d, cudaGraphicsResource *cudaPbo3d,
                          cudaGraphicsResource *cudaVbo3d, cudaStream_t stream)
 {
@@ -75,8 +76,8 @@ void computeJulia_dp_3d(Window2D &window, float *h_cuda_buffer,
   // compute the new julia set into 2d texture
   computeJuliaAvx(window.width, window.height, window.c,
                     window.zoomLevel, window.xOffset, window.yOffset,
-                    h_cuda_buffer);
-  CUDA_CHECK(cudaMemcpyAsync(dTexBuffer2d, h_cuda_buffer,
+                    hCudaBuffer);
+  CUDA_CHECK(cudaMemcpyAsync(dTexBuffer2d, hCudaBuffer,
                              window.width * window.height * sizeof(float),
                              cudaMemcpyHostToDevice, stream));
 
@@ -111,6 +112,9 @@ int main()
   Window2D window2d = Window2D(width, height);
   Window3D window3d = Window3D(width, height);
 
+  int frameCount = 0;
+  auto clock = std::chrono::high_resolution_clock();
+  auto start = clock.now();
   while (!glfwWindowShouldClose(window2d.windowPtr))
   {
     window2d.updateState();
@@ -166,6 +170,15 @@ int main()
     }
 
     glfwPollEvents();
+
+    if (++frameCount == 6283)
+    {
+      auto end = clock.now();
+      std::chrono::duration<double> diff = end - start;
+      std::cout << "fps: " << 6283 / diff.count() << std::endl;
+      frameCount = 0;
+      start = clock.now();
+    }
   }
   glfwTerminate();
 

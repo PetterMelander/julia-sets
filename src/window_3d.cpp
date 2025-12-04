@@ -101,9 +101,10 @@ Window3D::Window3D(int width, int height) : width(width), height(height)
                0);
 
   // set window parameters and callbacks
-  glfwSwapInterval(1);
+  glfwSwapInterval(0);
   glEnable(GL_DEPTH_TEST);
   glEnable(GL_CULL_FACE);
+  // glEnable(GL_FRAMEBUFFER_SRGB);
   glFrontFace(GL_CW);
   glfwSetWindowUserPointer(windowPtr, this);
 

@@ -96,11 +96,14 @@ private:
   static constexpr double R = 1.7320508075688772; // sqrt(3)
   static constexpr double r = 2.2;
   static constexpr double d = 0.3;
+  static constexpr double length = 0.7885;
 
   void updateC()
   {
-    c.real((R - r) * cos(theta) + d * cos((R - r) * theta / r));
-    c.imag((R - r) * sin(theta) - d * sin((R - r) * theta / r));
+    // c.real((R - r) * cos(theta) + d * cos((R - r) * theta / r));
+    // c.imag((R - r) * sin(theta) - d * sin((R - r) * theta / r));
+    c.real(length * cos(theta));
+    c.imag(length * sin(theta));
   }
 
   void updatePan()
