@@ -93,12 +93,36 @@ Window3D::Window3D(int width, int height) : width(width), height(height)
     glEnableVertexAttribArray(1);
   }
 
-  glGenTextures(1, &texture);
-  glBindTexture(GL_TEXTURE_2D, texture);
+  glGenTextures(1, &heightMap);
+  glBindTexture(GL_TEXTURE_2D, heightMap);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, width, height, 0, GL_RED, GL_FLOAT,
                0);
+
+  // set up resources for shadows
+  glGenFramebuffers(1, &depthMapFBO);
+  glGenTextures(1, &depthMap);
+  glBindTexture(GL_TEXTURE_2D, depthMap);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, SHADOW_WIDTH, SHADOW_HEIGHT, 0,
+    GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+  float borderColor[] = { 1.0f, 1.0f, 1.0f, 1.0f };
+  glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+
+  glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthMap, 0);
+  glDrawBuffer(GL_NONE);
+  glReadBuffer(GL_NONE);
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+  depthShader = std::make_unique<Shader>("shaders/shader_3d_shadow.vs", "shaders/shader_3d_shadow.fs");
+  depthShader->use();
+  depthShader->setMat4("lightSpaceMatrix", lightSpaceMatrix);
+  depthShader->setInt("heightMap", 1);
 
   // set window parameters and callbacks
   glfwSwapInterval(0);
@@ -116,10 +140,12 @@ Window3D::Window3D(int width, int height) : width(width), height(height)
   // init shader
   shader = std::make_unique<Shader>("shaders/shader_3d.vs", "shaders/shader_3d.fs");
   shader->use();
-  shader->setInt("texture2", 1);
+  shader->setInt("heightMap", 1);
   shader->setFloat("xstep", 2.0 / (float)(width - 1));
   shader->setFloat("ystep", 2.0 / (float)(height - 1));
   shader->setVec3("viewPos", camera.front);
+  shader->setMat4("lightSpaceMatrix", lightSpaceMatrix);
+  shader->setInt("shadowMap", 2);
 
   projection = glm::perspective(glm::radians(45.0f), (float)width / (float)height, 0.1f, 100.0f);
 }
