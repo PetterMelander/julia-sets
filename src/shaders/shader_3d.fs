@@ -9,7 +9,7 @@ in vec4 fragPosLightSpace;
 uniform vec3 viewPos;
 uniform sampler2D shadowMap;
 
-const vec3 lightColor = vec3(0.5, 0.5, 0.5);
+const vec3 lightColor = vec3(0.9, 0.9, 0.9);
 const vec3 lightDir = vec3(-0.4472135955, 0.894427191, 0.0);
 const vec3 ambient = vec3(0.1, 0.1, 0.1);
 const float specularStrength = 0.5;
@@ -40,7 +40,7 @@ float shadowCalculation(vec4 fragPosLightSpace, vec3 norm)
 
 void main()
 {
-    vec3 color = vec3(0.5 + vIntensity * 0.0015, 0.7, 0.9 - vIntensity * 0.0005);
+    vec3 color = vec3(vIntensity, 0.75 - vIntensity, 1.0 - vIntensity * 2.0);
 
     vec3 norm = normalize(vNorm);
     float diff = max(dot(norm, lightDir), 0.0);

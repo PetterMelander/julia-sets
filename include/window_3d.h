@@ -27,7 +27,7 @@ public:
   int activeBuffer = 0;
   bool needsRedraw = true;
 
-  Camera camera;
+  Camera camera{width, height};
 
   Window3D(int width, int height);
 
@@ -38,15 +38,18 @@ public:
 
   void redraw()
   {
-    glfwMakeContextCurrent(windowPtr);
+    if (glfwGetCurrentContext() != windowPtr)
+      glfwMakeContextCurrent(windowPtr);
     switchTexture(activeBuffer);
     redrawImage(activeBuffer);
   }
 
   void updateView()
   {
-    glm::mat4 view = camera.GetViewMatrix();
-    shader->setMat4("lookAt", projection * view);
+    if (glfwGetCurrentContext() != windowPtr)
+      glfwMakeContextCurrent(windowPtr);
+    glm::mat4 transform = camera.GetTransform();
+    shader->setMat4("lookAt", transform);
   }
 
   void switchBuffer()
@@ -65,7 +68,6 @@ private:
   GLuint vboIds[2];
   GLuint ebo;
 
-  glm::mat4 projection;
   std::unique_ptr<Shader> shader;
 
   GLuint depthMapFBO;

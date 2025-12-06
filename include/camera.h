@@ -27,6 +27,7 @@ class Camera
 public:
   glm::vec3 front;
   glm::vec3 up;
+  glm::mat4 projection;
 
   // glm::vec3 prevFront; // necessary for drawing correct 
   // glm::vec3 prevUp; // necessary for drawing correct 
@@ -37,15 +38,16 @@ public:
   float movementSpeed;
   float zoom;
 
-  Camera(float yaw = YAW, float pitch = PITCH)
+  Camera(int width, int height, float yaw = YAW, float pitch = PITCH)
       : front(glm::vec3(0.0f, 0.0f, -1.0f)), yaw(yaw), pitch(pitch), movementSpeed(SPEED), zoom(ZOOM)
   {
+    projection = glm::perspective(glm::radians(45.0f), (float)width / (float)height, 0.1f, 100.0f);
     updateCameraVectors();
   }
 
-  glm::mat4 GetViewMatrix()
+  glm::mat4 GetTransform()
   {
-    return glm::lookAt(front, glm::vec3(0.0f, 0.35f, 0.0f), up);
+    return projection * glm::lookAt(front, glm::vec3(0.0f, 0.35f, 0.0f), up);
   }
 
   // processes input received from any keyboard-like input system. Accepts input

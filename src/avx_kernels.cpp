@@ -60,6 +60,9 @@ __m512 evaluate(__m512 zReal, __m512 zImag, __m512 cReal, __m512 cImag)
   __m512 one = _mm512_set1_ps(1.0f);
   smoothing = _mm512_fmadd_ps(smoothing, negInvLog2, one);
   escapeIter = _mm512_mask_add_ps(escapeIter, ~active, escapeIter, smoothing);
+  __m512 two = _mm512_set1_ps(2.0f);
+  __m512 twoHundred = _mm512_set1_ps(200.0f);
+  escapeIter = _mm512_div_ps(escapeIter, _mm512_fmadd_ps(two, escapeIter, twoHundred));
   return escapeIter;
 }
 
@@ -113,6 +116,9 @@ __m512d evaluate(__m512d zReal, __m512d zImag, __m512d cReal, __m512d cImag)
   __m512d one = _mm512_set1_pd(1.0);
   smoothing = _mm512_fmadd_pd(smoothing, negInvLog2, one);
   escapeIter = _mm512_mask_add_pd(escapeIter, ~active, escapeIter, smoothing);
+  __m512d two = _mm512_set1_pd(2.0);
+  __m512d twoHundred = _mm512_set1_pd(200.0);
+  escapeIter = _mm512_div_pd(escapeIter, _mm512_fmadd_pd(two, escapeIter, twoHundred));
   return escapeIter;
 }
 
