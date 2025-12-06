@@ -14,6 +14,7 @@
 #include "shader.h"
 #include "window_2d.h"
 
+#ifndef NDEBUG
 void APIENTRY glDebugOutput(GLenum source, GLenum type, unsigned int id,
                             GLenum severity, GLsizei length,
                             const char *message, const void *userParam)
@@ -82,6 +83,7 @@ void APIENTRY glDebugOutput(GLenum source, GLenum type, unsigned int id,
 
   std::cout << "---------------" << std::endl;
 }
+#endif
 
 Window2D::Window2D(int width, int height) : width(width), height(height)
 {

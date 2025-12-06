@@ -161,12 +161,15 @@ int main()
     }
     else if (window3d.needsRedraw)
     {
+      window3d.switchBuffer();
       window3d.updateView();
       window3d.redraw();
+      window3d.switchBuffer();
     }
     else
     {
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      --frameCount;
     }
 
     glfwPollEvents();

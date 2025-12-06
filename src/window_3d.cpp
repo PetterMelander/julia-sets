@@ -146,6 +146,4 @@ Window3D::Window3D(int width, int height) : width(width), height(height)
   shader->setVec3("viewPos", camera.front);
   shader->setMat4("lightSpaceMatrix", lightSpaceMatrix);
   shader->setInt("shadowMap", 2);
-
-  projection = glm::perspective(glm::radians(45.0f), (float)width / (float)height, 0.1f, 100.0f);
 }

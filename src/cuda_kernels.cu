@@ -20,7 +20,7 @@ __device__ float evaluate(float2 z, const float2 c)
   constexpr float R = 2.0f;
 
   float escapeIter = MAX_ITERS;
-  float escapeAbs2 = 0;
+  float escapeAbs2 = 0.0f;
   for (int i = 0; i < MAX_ITERS; ++i)
   {
     float abs2 = z.x * z.x + z.y * z.y;
@@ -31,15 +31,20 @@ __device__ float evaluate(float2 z, const float2 c)
       break;
     }
     float re = z.x * z.x - z.y * z.y + c.x;
-    float im = 2 * z.x * z.y + c.y;
+    float im = 2.0f * z.x * z.y + c.y;
     z.x = re;
     z.y = im;
   }
+  float retval;
   if (escapeIter < MAX_ITERS)
   {
-    return escapeIter + 1 - __logf(__logf(__fsqrt_rn(escapeAbs2))) / logf(2);
+    retval = escapeIter + 1.0f - __logf(__logf(__fsqrt_rn(escapeAbs2))) / logf(2.0f);
   }
-  return MAX_ITERS;
+  else
+  {
+    retval = MAX_ITERS; 
+  }
+  return retval / (retval + 100.0f) * 0.5f;
 }
 
 __global__ void julia(float *const __restrict__ buffer, const float range, const float2 offsets,
@@ -137,7 +142,7 @@ __global__ void compute_normals(const float *__restrict__ const h, float2 *__res
     int gx = tileTopLeftX + lx;
 
     if (gx >= 0 && gx < width && gy >= 0 && gy < height)
-      s_h[ly][lx] = __fsqrt_rz(__fsqrt_rz(h[gy * width + gx])) * 0.075f; // TODO: decide
+      s_h[ly][lx] = h[gy * width + gx];
     else
       s_h[ly][lx] = 0.0f;
   }
