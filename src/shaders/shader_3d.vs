@@ -12,10 +12,11 @@ out float vIntensity;
 out vec3 vNorm;
 out vec3 fragPos;
 out vec4 fragPosLightSpace;
+out vec2 uv;
 
 void main()
 {
-    vec2 uv = aPos * 0.5 + 0.5;
+    uv = aPos * 0.5 + 0.5;
     float h = texture(heightMap, uv).r;
 
     vec4 pos = vec4(aPos.x, h, aPos.y, 1.0);
