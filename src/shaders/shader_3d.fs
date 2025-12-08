@@ -1,5 +1,5 @@
 #version 330 core
-out vec4 FragColor;
+layout (location = 0) out vec4 normIntensity;
 
 in float vIntensity;
 in vec3 vNorm;
@@ -44,14 +44,16 @@ void main()
 
     vec3 norm = normalize(vNorm);
     float diff = max(dot(norm, lightDir), 0.0);
-    vec3 diffuse = diff * lightColor;
+    // vec3 diffuse = diff * lightColor;
 
     vec3 viewDir = normalize(viewPos - fragPos);
     vec3 halfwayDir = normalize(lightDir + viewDir);
     float spec = pow(max(dot(norm, halfwayDir), 0.0), 64);
-    vec3 specular = specularStrength * spec * lightColor;
+    // vec3 specular = specularStrength * spec * lightColor;
 
     float shadow = shadowCalculation(fragPosLightSpace, norm);
-    color = (ambient + (1.0 - shadow) * (diffuse + specular)) * color;
-    FragColor = vec4(pow(color, gammaInv), 1.0);
+    // color = (ambient + (1.0 - shadow) * (diffuse + specular)) * color;
+    // FragColor = vec4(pow(color, gammaInv), 1.0);
+    normIntensity.rgb = norm;
+    normIntensity.a = (1.0 - shadow) * (diff + spec);
 }

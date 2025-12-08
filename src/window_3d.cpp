@@ -59,33 +59,65 @@ Window3D::Window3D(int width, int height) : width(width), height(height)
     }
   }
 
-  glGenVertexArrays(2, vaoIds);
-  glGenBuffers(2, pboIds);
-  glGenBuffers(2, vboIds);
-  glGenBuffers(1, &ebo);
+  // set up main framebuffer and related objects
+  glGenFramebuffers(1, &mainFBO);
+  glBindFramebuffer(GL_FRAMEBUFFER, mainFBO);
+  
+  // depth buffer
+  glGenTextures(1, &mainDepthMap);
+  glBindTexture(GL_TEXTURE_2D, mainDepthMap);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, width, height, 0,
+    GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+  float borderColor[] = { 1.0f, 1.0f, 1.0f, 1.0f };
+  glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, mainDepthMap, 0);
 
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+  // normals + intensity map
+  glGenTextures(1, &mainNormalIntensityMap);
+  glBindTexture(GL_TEXTURE_2D, mainNormalIntensityMap);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, width, height, 0, GL_RGBA, GL_FLOAT, NULL);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+    mainNormalIntensityMap, 0);
+  
+  glDrawBuffer(GL_NONE);
+  glReadBuffer(GL_NONE);
+  GLuint attachments[1] = {GL_COLOR_ATTACHMENT0};
+  glDrawBuffers(1, attachments);
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+  glGenVertexArrays(2, mainVaoIds);
+  glGenBuffers(2, mainPboIds);
+  glGenBuffers(2, mainVboIds);
+  glGenBuffers(1, &mainEbo);
+
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mainEbo);
   glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int),
                indices.data(), GL_STATIC_DRAW);
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
   for (int i = 0; i < 2; ++i)
   {
-    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pboIds[i]);
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, mainPboIds[i]);
     glBufferData(GL_PIXEL_UNPACK_BUFFER, vertices.size() * sizeof(float),
                  vertices.data(), GL_DYNAMIC_DRAW);
-    CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&cudaPboResources[i], pboIds[i],
+    CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&cudaPboResources[i], mainPboIds[i],
                                             cudaGraphicsMapFlagsWriteDiscard));
 
-    glBindVertexArray(vaoIds[i]);
+    glBindVertexArray(mainVaoIds[i]);
 
-    glBindBuffer(GL_ARRAY_BUFFER, vboIds[i]);
+    glBindBuffer(GL_ARRAY_BUFFER, mainVboIds[i]);
     glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float),
                  vertices.data(), GL_DYNAMIC_DRAW);
-    CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&cudaVboResources[i], vboIds[i],
+    CUDA_CHECK(cudaGraphicsGLRegisterBuffer(&cudaVboResources[i], mainVboIds[i],
                                             cudaGraphicsMapFlagsWriteDiscard));
 
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mainEbo);
 
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)0);
     glEnableVertexAttribArray(0);
@@ -101,20 +133,19 @@ Window3D::Window3D(int width, int height) : width(width), height(height)
                0);
 
   // set up resources for shadows
-  glGenFramebuffers(1, &depthMapFBO);
-  glGenTextures(1, &depthMap);
-  glBindTexture(GL_TEXTURE_2D, depthMap);
+  glGenFramebuffers(1, &shadowDepthMapFBO);
+  glGenTextures(1, &shadowDepthMap);
+  glBindTexture(GL_TEXTURE_2D, shadowDepthMap);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, SHADOW_WIDTH, SHADOW_HEIGHT, 0,
     GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-  float borderColor[] = { 1.0f, 1.0f, 1.0f, 1.0f };
   glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
 
-  glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthMap, 0);
+  glBindFramebuffer(GL_FRAMEBUFFER, shadowDepthMapFBO);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadowDepthMap, 0);
   glDrawBuffer(GL_NONE);
   glReadBuffer(GL_NONE);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -124,9 +155,30 @@ Window3D::Window3D(int width, int height) : width(width), height(height)
   depthShader->setMat4("lightSpaceMatrix", lightSpaceMatrix);
   depthShader->setInt("heightMap", 1);
 
+  // set up resources for postprocessing pass
+  float quadVertices[] = {
+   -1.0f,  1.0f, 0.0f, 0.0f, 1.0f,
+   -1.0f, -1.0f, 0.0f, 0.0f, 0.0f,
+    1.0f,  1.0f, 0.0f, 1.0f, 1.0f,
+    1.0f, -1.0f, 0.0f, 1.0f, 0.0f,
+  };
+  glGenVertexArrays(1, &postVao);
+  glGenBuffers(1, &postVbo);
+  glBindVertexArray(postVao);
+  glBindBuffer(GL_ARRAY_BUFFER, postVbo);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), &quadVertices, GL_STATIC_DRAW);
+  glEnableVertexAttribArray(0);
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+  glEnableVertexAttribArray(1);
+  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+
+  postShader = std::make_unique<Shader>("shaders/shader_3d_post.vs", "shaders/shader_3d_post.fs");
+  postShader->use();
+  postShader->setInt("depthMap", 3);
+  postShader->setInt("normalIntensityMap", 4);
+
   // set window parameters and callbacks
   glfwSwapInterval(0);
-  glEnable(GL_DEPTH_TEST);
   glEnable(GL_CULL_FACE);
   // glEnable(GL_FRAMEBUFFER_SRGB);
   glFrontFace(GL_CW);
@@ -138,12 +190,12 @@ Window3D::Window3D(int width, int height) : width(width), height(height)
   glfwSetFramebufferSizeCallback(windowPtr, framebufferSizeCallback);
 
   // init shader
-  shader = std::make_unique<Shader>("shaders/shader_3d.vs", "shaders/shader_3d.fs");
-  shader->use();
-  shader->setInt("heightMap", 1);
-  shader->setFloat("xstep", 2.0 / (float)(width - 1));
-  shader->setFloat("ystep", 2.0 / (float)(height - 1));
-  shader->setVec3("viewPos", camera.front);
-  shader->setMat4("lightSpaceMatrix", lightSpaceMatrix);
-  shader->setInt("shadowMap", 2);
+  mainShader = std::make_unique<Shader>("shaders/shader_3d.vs", "shaders/shader_3d.fs");
+  mainShader->use();
+  mainShader->setInt("heightMap", 1);
+  mainShader->setFloat("xstep", 2.0 / (float)(width - 1));
+  mainShader->setFloat("ystep", 2.0 / (float)(height - 1));
+  mainShader->setVec3("viewPos", camera.front);
+  mainShader->setMat4("lightSpaceMatrix", lightSpaceMatrix);
+  mainShader->setInt("shadowMap", 2);
 }
