@@ -8,7 +8,6 @@ uniform float xstep; // TODO: make constant?
 uniform float ystep; // TODO: make constant?
 uniform mat4 lightSpaceMatrix;
 
-out float vIntensity;
 out vec3 vNorm;
 out vec3 fragPos;
 out vec4 fragPosLightSpace;
@@ -23,7 +22,6 @@ void main()
 
     vNorm = vec3(aNorm.x * ystep, 6 * xstep * ystep, aNorm.y * xstep);
     gl_Position = lookAt * pos;
-    vIntensity = h;
     fragPos = vec3(pos);
     fragPosLightSpace = lightSpaceMatrix * vec4(fragPos, 1.0);
 }

@@ -2,6 +2,7 @@
 #include <cmath>
 #include <iostream>
 #include <memory>
+#include <random>
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -21,7 +22,7 @@ Window3D::Window3D(int width, int height) : width(width), height(height)
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-  glfwWindowHint(GLFW_SAMPLES, 16);
+  glfwWindowHint(GLFW_SAMPLES, 4);
 
   windowPtr = glfwCreateWindow(width, height, "Julia", NULL, NULL);
   if (windowPtr == NULL)
@@ -57,6 +58,21 @@ Window3D::Window3D(int width, int height) : width(width), height(height)
         indices.push_back(i + width);
       }
     }
+  }
+
+  constexpr size_t aoNumSamples = 16;
+  std::uniform_real_distribution<float> randomAngles(0.0, 2 * M_PIf32);
+  std::uniform_real_distribution<float> randomRadii(0.0, 1.0);
+  std::default_random_engine generator;
+  std::array<glm::vec2, aoNumSamples> aoKernel;
+  for (unsigned int i = 0; i < aoNumSamples; ++i)
+  {
+    float a = randomAngles(generator);
+    glm::vec2 sample(cosf(a), sinf(a));
+    sample = sample * sqrtf(randomRadii(generator));
+    float scale = (float)i / (float)aoNumSamples;
+    scale = 0.1f + scale * scale * 0.9f;
+    aoKernel[i] = sample * scale;
   }
 
   glGenVertexArrays(2, vaoIds);
@@ -95,10 +111,9 @@ Window3D::Window3D(int width, int height) : width(width), height(height)
 
   glGenTextures(1, &heightMap);
   glBindTexture(GL_TEXTURE_2D, heightMap);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, width, height, 0, GL_RED, GL_FLOAT,
-               0);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, width, height, 0, GL_RED, GL_FLOAT, 0);
 
   // set up resources for shadows
   glGenFramebuffers(1, &depthMapFBO);
@@ -146,4 +161,8 @@ Window3D::Window3D(int width, int height) : width(width), height(height)
   shader->setVec3("viewPos", camera.front);
   shader->setMat4("lightSpaceMatrix", lightSpaceMatrix);
   shader->setInt("shadowMap", 2);
+  for (unsigned int i = 0; i < aoNumSamples; ++i)
+  {
+    shader->setVec2("aoSamples[" + std::to_string(i) + "]", aoKernel[i]);
+  }
 }

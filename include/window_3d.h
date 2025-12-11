@@ -61,6 +61,11 @@ public:
 
   int getNextBufferIndex() { return (activeBuffer + 1) % 2; }
 
+  void swap() {
+    // glfwMakeContextCurrent(windowPtr);
+    glfwSwapBuffers(windowPtr);
+  }
+
 private:
   GLuint pboIds[2];
   GLuint heightMap;
@@ -123,7 +128,7 @@ private:
 
     needsRedraw = false;
 
-    glfwSwapBuffers(windowPtr);
+    // glfwSwapBuffers(windowPtr);
   }
 
   void processMovement(float deltaTime)

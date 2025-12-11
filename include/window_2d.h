@@ -84,6 +84,11 @@ public:
 
   int getNextBufferIndex() { return (activeBuffer + 1) % 2; }
 
+  void swap() {
+    glfwMakeContextCurrent(windowPtr);
+    glfwSwapBuffers(windowPtr);
+  }
+
 private:
   GLuint pboIds[2];
   GLuint texture;
@@ -159,6 +164,6 @@ private:
     glBindVertexArray(vao);
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
-    glfwSwapBuffers(windowPtr);
+    // glfwSwapBuffers(windowPtr);
   }
 };
