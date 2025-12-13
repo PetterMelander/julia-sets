@@ -66,7 +66,8 @@ float occlusionCalculation(vec2 uv, float fragHeight, vec3 norm)
 
 void main()
 {
-    vec3 color = vec3(0.5 + fragPos.y * 0.5, 0.25 - fragPos.y * 0.9, 1.0 - fragPos.y * 4.0);
+    float height = log(4.0 * fragPos.y) * -1.0 * 0.1 * 0.25;
+    vec3 color = vec3(0.5 + height * 0.5, 0.25 - height * 0.9, 1.0 - height * 4.0);
     vec3 norm = normalize(vNorm);
 
     float occlusion = occlusionCalculation(uv, fragPos.y, norm);

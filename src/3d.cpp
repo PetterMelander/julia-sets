@@ -53,7 +53,8 @@ void computeJulia_sp_3d(Window2D &window, cudaGraphicsResource *cudaPbo2d,
       dTexBuffer2d, sizeof(float) * window.width, size, NppiPoint{0, 0},
       dTexBuffer3d, sizeof(float) * window.width, size, NPP_MASK_SIZE_9_X_9,
       NPP_BORDER_REPLICATE, ctx));
-  NPP_CHECK(nppiMinMax_32f_C1R_Ctx(dTexBuffer3d, sizeof(float) * window.width, size, dImgMin, dImgMax, dNppistBuffer, ctx));
+  size = {window.width / 2, window.height / 2};
+  NPP_CHECK(nppiMinMax_32f_C1R_Ctx(dTexBuffer3d + window.height / 4 * window.width + window.width / 4, sizeof(float) * window.width, size, dImgMin, dImgMax, dNppistBuffer, ctx));
   rescaleImage(window.width, window.height, dImgMin, dImgMax, dTexBuffer3d, stream);
   computeNormalsCuda(window.width, window.height, dTexBuffer3d, dVboBuffer3d, stream);
 
@@ -94,11 +95,9 @@ void computeJulia_dp_3d(Window2D &window, float *hCudaBuffer,
       dTexBuffer2d, sizeof(float) * window.width, size, NppiPoint{0, 0},
       dTexBuffer3d, sizeof(float) * window.width, size, NPP_MASK_SIZE_9_X_9,
       NPP_BORDER_REPLICATE, ctx));
-  NPP_CHECK(nppiMinMax_32f_C1R_Ctx(dTexBuffer3d, sizeof(float) * window.width, size, dImgMin, dImgMax, dNppistBuffer, ctx));
+  size = {window.width / 2, window.height / 2};
+  NPP_CHECK(nppiMinMax_32f_C1R_Ctx(dTexBuffer3d + window.height / 4 * window.width + window.width / 4, sizeof(float) * window.width, size, dImgMin, dImgMax, dNppistBuffer, ctx));
   rescaleImage(window.width, window.height, dImgMin, dImgMax, dTexBuffer3d, stream);
-  // float tmp;
-  // cudaMemcpy(&tmp, dImgMin, sizeof(float), cudaMemcpyDeviceToHost);
-  // std::cout << tmp << std::endl;
   computeNormalsCuda(window.width, window.height, dTexBuffer3d, dVboBuffer3d, stream);
 
   CUDA_CHECK(cudaGraphicsUnmapResources(1, &cudaPbo2d, stream));
@@ -130,7 +129,7 @@ int main()
   CUDA_CHECK(cudaMalloc(&dImgMax, sizeof(float)));
   CUDA_CHECK(cudaMalloc(&dImgMin, sizeof(float)));
   size_t minMaxBufferSize;
-  NppiSize size = {width, height};
+  NppiSize size = {width / 2, height / 2};
   NPP_CHECK(nppiMinMaxGetBufferHostSize_32f_C1R_Ctx(size, &minMaxBufferSize, ctx));
   Npp8u *dNppistBuffer;
   CUDA_CHECK(cudaStreamSynchronize(stream));

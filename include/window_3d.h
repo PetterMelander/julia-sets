@@ -133,6 +133,8 @@ private:
 
   void processMovement(float deltaTime)
   {
+    if (glfwGetCurrentContext() != windowPtr)
+      glfwMakeContextCurrent(windowPtr);
     if (glfwGetKey(windowPtr, GLFW_KEY_ESCAPE) == GLFW_PRESS)
       glfwSetWindowShouldClose(windowPtr, true);
 
