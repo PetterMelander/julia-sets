@@ -26,9 +26,8 @@ public:
 
   int activeBuffer = 0;
   bool needsRedraw = true;
-  bool needsTextureSwitch = false;
 
-  Camera camera;
+  Camera camera{width, height};
 
   Window3D(int width, int height);
 
@@ -39,15 +38,18 @@ public:
 
   void redraw()
   {
-    glfwMakeContextCurrent(windowPtr);
+    if (glfwGetCurrentContext() != windowPtr)
+      glfwMakeContextCurrent(windowPtr);
     switchTexture(activeBuffer);
     redrawImage(activeBuffer);
   }
 
   void updateView()
   {
-    glm::mat4 view = camera.GetViewMatrix();
-    shader->setMat4("lookAt", projection * view);
+    if (glfwGetCurrentContext() != windowPtr)
+      glfwMakeContextCurrent(windowPtr);
+    glm::mat4 transform = camera.GetTransform();
+    shader->setMat4("lookAt", transform);
   }
 
   void switchBuffer()
@@ -59,34 +61,65 @@ public:
 
   int getNextBufferIndex() { return (activeBuffer + 1) % 2; }
 
+  void swap() {
+    // glfwMakeContextCurrent(windowPtr);
+    glfwSwapBuffers(windowPtr);
+  }
+
 private:
   GLuint pboIds[2];
-  GLuint texture;
+  GLuint heightMap;
   GLuint vaoIds[2];
   GLuint vboIds[2];
   GLuint ebo;
 
-  glm::mat4 projection;
-
   std::unique_ptr<Shader> shader;
+
+  GLuint depthMapFBO;
+  GLuint depthMap;
+  
+  constexpr static unsigned int SHADOW_WIDTH = 4096;
+  constexpr static unsigned int SHADOW_HEIGHT = 4096;
+  const glm::mat4 lightProjection = glm::ortho(-1.0f, 1.0f, -1.0f, 1.0f, 0.4f, 1.5f);
+  const glm::mat4 lightView = glm::lookAt(glm::vec3(0.4472135955, 0.894427191, 0.0),
+                                          glm::vec3(0.0f, 0.0f, 0.0f),
+                                          glm::vec3(0.0f, 1.0f, 0.0f));
+  const glm::mat4 lightSpaceMatrix = lightProjection * lightView;
+  std::unique_ptr<Shader> depthShader;
 
   void switchTexture(int index)
   {
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, texture);
+    glBindTexture(GL_TEXTURE_2D, heightMap);
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pboIds[index]);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RED, GL_FLOAT, 0);
   }
 
   void redrawImage(int index)
   {
+    // depth pass
+    depthShader->use();
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, heightMap);
+
+    glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
+    glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
+      glClear(GL_DEPTH_BUFFER_BIT);
+      glBindVertexArray(vaoIds[index]);
+      glDrawElements(GL_TRIANGLES, 3 * 2 * (height - 1) * (width - 1), GL_UNSIGNED_INT, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    // main pass
+    glViewport(0, 0, width, height);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glEnable(GL_MULTISAMPLE);
 
     shader->use();
 
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, texture);
+    glBindTexture(GL_TEXTURE_2D, heightMap);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, depthMap);
 
     glBindVertexArray(vaoIds[index]);
     glDrawElements(GL_TRIANGLES, 3 * 2 * (height - 1) * (width - 1), GL_UNSIGNED_INT, 0);
@@ -95,7 +128,7 @@ private:
 
     needsRedraw = false;
 
-    glfwSwapBuffers(windowPtr);
+    // glfwSwapBuffers(windowPtr);
   }
 
   void processMovement(float deltaTime)

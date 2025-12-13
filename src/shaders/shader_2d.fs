@@ -12,7 +12,7 @@ void main()
     float intensity = texture(texture1, TexCoord).r;
     if (intensity < 1000.0)
     {
-        FragColor.rgb = sin(vec3(intensity) * 0.05 + kPhases) * 0.5 + 0.5;
+        FragColor.rgb = sin(vec3(intensity * 0.05) + kPhases) * 0.5 + 0.5;
         FragColor.a = 1.0;
     }
     else

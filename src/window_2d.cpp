@@ -14,6 +14,7 @@
 #include "shader.h"
 #include "window_2d.h"
 
+#ifndef NDEBUG
 void APIENTRY glDebugOutput(GLenum source, GLenum type, unsigned int id,
                             GLenum severity, GLsizei length,
                             const char *message, const void *userParam)
@@ -82,6 +83,7 @@ void APIENTRY glDebugOutput(GLenum source, GLenum type, unsigned int id,
 
   std::cout << "---------------" << std::endl;
 }
+#endif
 
 Window2D::Window2D(int width, int height) : width(width), height(height)
 {
@@ -92,7 +94,7 @@ Window2D::Window2D(int width, int height) : width(width), height(height)
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
   glfwWindowHint(GLFW_SAMPLES, 0);
 
-#ifdef NDEBUG
+#ifndef NDEBUG
   glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, true);
 #endif
 
@@ -109,7 +111,7 @@ Window2D::Window2D(int width, int height) : width(width), height(height)
     std::cout << "Failed to initialize GLAD" << std::endl;
   }
 
-#ifdef NDEBUG
+#ifndef NDEBUG
   int flags;
   glGetIntegerv(GL_CONTEXT_FLAGS, &flags);
   if (flags & GL_CONTEXT_FLAG_DEBUG_BIT)

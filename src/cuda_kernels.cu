@@ -20,7 +20,7 @@ __device__ float evaluate(float2 z, const float2 c)
   constexpr float R = 2.0f;
 
   float escapeIter = MAX_ITERS;
-  float escapeAbs2 = 0;
+  float escapeAbs2 = 0.0f;
   for (int i = 0; i < MAX_ITERS; ++i)
   {
     float abs2 = z.x * z.x + z.y * z.y;
@@ -31,15 +31,20 @@ __device__ float evaluate(float2 z, const float2 c)
       break;
     }
     float re = z.x * z.x - z.y * z.y + c.x;
-    float im = 2 * z.x * z.y + c.y;
+    float im = 2.0f * z.x * z.y + c.y;
     z.x = re;
     z.y = im;
   }
+  float retval;
   if (escapeIter < MAX_ITERS)
   {
-    return escapeIter + 1 - __logf(__logf(__fsqrt_rn(escapeAbs2))) / logf(2);
+    retval = escapeIter + 1.0f - __logf(__logf(__fsqrt_rn(escapeAbs2))) / logf(2.0f);
   }
-  return MAX_ITERS;
+  else
+  {
+    retval = MAX_ITERS;
+  }
+  return retval;
 }
 
 __global__ void julia(float *const __restrict__ buffer, const float range, const float2 offsets,
@@ -60,7 +65,7 @@ __global__ void julia(float *const __restrict__ buffer, const float range, const
 }
 
 void computeJuliaCuda(int width, int height, std::complex<double> c, double zoomLevel,
-                        double xOffset, double yOffset, float *buffer, cudaStream_t stream)
+                      double xOffset, double yOffset, float *buffer, cudaStream_t stream)
 {
   float2 C = make_float2(c.real(), c.imag());
   float2 offsets = make_float2(xOffset, yOffset);
@@ -69,7 +74,7 @@ void computeJuliaCuda(int width, int height, std::complex<double> c, double zoom
   dim3 blockDims{BLOCK_SIZE_JULIA, BLOCK_SIZE_JULIA};
   dim3 gridDims{NumBlocks, NumBlocks};
   julia<<<gridDims, blockDims, 0, stream>>>(buffer, (float)(1.0 / zoomLevel),
-                                              offsets, C, width, height);
+                                            offsets, C, width, height);
   CUDA_CHECK(cudaGetLastError());
 }
 
@@ -137,7 +142,7 @@ __global__ void compute_normals(const float *__restrict__ const h, float2 *__res
     int gx = tileTopLeftX + lx;
 
     if (gx >= 0 && gx < width && gy >= 0 && gy < height)
-      s_h[ly][lx] = __fsqrt_rz(__fsqrt_rz(h[gy * width + gx])) * 0.075f; // TODO: decide
+      s_h[ly][lx] = h[gy * width + gx];
     else
       s_h[ly][lx] = 0.0f;
   }
@@ -185,5 +190,32 @@ void computeNormalsCuda(int width, int height, float *const h, float *out, cudaS
   float2 *out_f2 = reinterpret_cast<float2 *>(out);
   compute_normals<BLOCK_SIZE_NORMALS, BLOCK_SIZE_NORMALS>
       <<<gridDims, blockDims, 0, stream>>>(h, out_f2, height, width);
+  CUDA_CHECK(cudaGetLastError());
+}
+
+__global__ void scaleImage(const int dsize, const float *__restrict__ const imgMin, const float *__restrict__ const imgMax, float *__restrict__ h)
+{
+  int idx = blockDim.x * blockIdx.x + threadIdx.x;
+  __shared__ float scale;
+  __shared__ float min;
+  if (threadIdx.x == 0)
+  {
+    min = __ldg(imgMin);
+    float max = __ldg(imgMax);
+    scale = 0.25f / (max - min);
+  }
+  __syncthreads();
+  if (idx < dsize)
+  {
+    h[idx] = (h[idx] - min) * scale;
+  }
+}
+
+void rescaleImage(int width, int height, float *imgMin, float *imgMax, float *h, cudaStream_t stream)
+{
+  unsigned int dsize = width * height;
+  int block_size = 512;
+  int num_blocks = (dsize + block_size - 1) / block_size;
+  scaleImage<<<num_blocks, block_size, 0, stream>>>(dsize, imgMin, imgMax, h);
   CUDA_CHECK(cudaGetLastError());
 }
