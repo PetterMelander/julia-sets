@@ -202,7 +202,7 @@ __global__ void scaleImage(const int dsize, const float *__restrict__ const imgM
   {
     min = __ldg(imgMin);
     float max = __ldg(imgMax);
-    scale = 0.35f / (max - min);
+    scale = 0.25f / (max - min);
   }
   __syncthreads();
   if (idx < dsize)

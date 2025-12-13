@@ -81,7 +81,7 @@ private:
   constexpr static unsigned int SHADOW_WIDTH = 4096;
   constexpr static unsigned int SHADOW_HEIGHT = 4096;
   const glm::mat4 lightProjection = glm::ortho(-1.0f, 1.0f, -1.0f, 1.0f, 0.4f, 1.5f);
-  const glm::mat4 lightView = glm::lookAt(glm::vec3(-0.4472135955, 0.894427191, 0.0),
+  const glm::mat4 lightView = glm::lookAt(glm::vec3(0.4472135955, 0.894427191, 0.0),
                                           glm::vec3(0.0f, 0.0f, 0.0f),
                                           glm::vec3(0.0f, 1.0f, 0.0f));
   const glm::mat4 lightSpaceMatrix = lightProjection * lightView;

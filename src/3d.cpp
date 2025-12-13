@@ -29,8 +29,7 @@ NppStreamContext ctx;
 // TODO: place in other file
 void computeJulia_sp_3d(Window2D &window, cudaGraphicsResource *cudaPbo2d,
                         cudaGraphicsResource *cudaPbo3d, cudaGraphicsResource *cudaVbo3d,
-                        float *dImgMax, float *dImgMin, Npp8u *dNppistBuffer,
-                        cudaStream_t stream)
+                        float *dImgMax, float *dImgMin, Npp8u *dNppistBuffer, cudaStream_t stream)
 {
   float *dTexBuffer2d = nullptr;
   CUDA_CHECK(cudaGraphicsMapResources(1, &cudaPbo2d, 0));
@@ -65,7 +64,8 @@ void computeJulia_sp_3d(Window2D &window, cudaGraphicsResource *cudaPbo2d,
 
 void computeJulia_dp_3d(Window2D &window, float *hCudaBuffer,
                         cudaGraphicsResource *cudaPbo2d, cudaGraphicsResource *cudaPbo3d,
-                        cudaGraphicsResource *cudaVbo3d, cudaStream_t stream)
+                        cudaGraphicsResource *cudaVbo3d, float *dImgMax, float *dImgMin,
+                        Npp8u *dNppistBuffer, cudaStream_t stream)
 {
   float *dTexBuffer2d = nullptr;
   CUDA_CHECK(cudaGraphicsMapResources(1, &cudaPbo2d, 0));
@@ -94,6 +94,11 @@ void computeJulia_dp_3d(Window2D &window, float *hCudaBuffer,
       dTexBuffer2d, sizeof(float) * window.width, size, NppiPoint{0, 0},
       dTexBuffer3d, sizeof(float) * window.width, size, NPP_MASK_SIZE_9_X_9,
       NPP_BORDER_REPLICATE, ctx));
+  NPP_CHECK(nppiMinMax_32f_C1R_Ctx(dTexBuffer3d, sizeof(float) * window.width, size, dImgMin, dImgMax, dNppistBuffer, ctx));
+  rescaleImage(window.width, window.height, dImgMin, dImgMax, dTexBuffer3d, stream);
+  // float tmp;
+  // cudaMemcpy(&tmp, dImgMin, sizeof(float), cudaMemcpyDeviceToHost);
+  // std::cout << tmp << std::endl;
   computeNormalsCuda(window.width, window.height, dTexBuffer3d, dVboBuffer3d, stream);
 
   CUDA_CHECK(cudaGraphicsUnmapResources(1, &cudaPbo2d, stream));
@@ -172,6 +177,9 @@ int main()
                            window2d.cudaPboResources[nextBufferIdx],
                            window3d.cudaPboResources[nextBufferIdx],
                            window3d.cudaVboResources[nextBufferIdx],
+                           dImgMax,
+                           dImgMin,
+                           dNppistBuffer,
                            window2d.streams[nextBufferIdx]);
       }
 

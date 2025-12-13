@@ -15,7 +15,7 @@ __m512 evaluate(__m512 zReal, __m512 zImag, __m512 cReal, __m512 cImag)
   __m512 R2 = _mm512_set1_ps(R_s * R_s);
   __mmask16 active = 0xFFFF;
   __m512 escapeIter = _mm512_set1_ps(MAX_ITERS);
-  __m512 escapeAbs2 = _mm512_set1_ps(0);
+  __m512 escapeAbs2 = _mm512_set1_ps(0.0f);
 
   for (int i = 0; i < MAX_ITERS; ++i)
   {
@@ -60,9 +60,6 @@ __m512 evaluate(__m512 zReal, __m512 zImag, __m512 cReal, __m512 cImag)
   __m512 one = _mm512_set1_ps(1.0f);
   smoothing = _mm512_fmadd_ps(smoothing, negInvLog2, one);
   escapeIter = _mm512_mask_add_ps(escapeIter, ~active, escapeIter, smoothing);
-  __m512 two = _mm512_set1_ps(2.0f);
-  __m512 twoHundred = _mm512_set1_ps(200.0f);
-  escapeIter = _mm512_div_ps(escapeIter, _mm512_fmadd_ps(two, escapeIter, twoHundred));
   return escapeIter;
 }
 
@@ -71,7 +68,7 @@ __m512d evaluate(__m512d zReal, __m512d zImag, __m512d cReal, __m512d cImag)
   __m512d R2 = _mm512_set1_pd(R_d * R_d);
   __mmask8 active = 0xFF;
   __m512d escapeIter = _mm512_set1_pd(MAX_ITERS);
-  __m512d escapeAbs2 = _mm512_set1_pd(0);
+  __m512d escapeAbs2 = _mm512_set1_pd(0.0);
 
   for (int i = 0; i < MAX_ITERS; ++i)
   {
@@ -116,9 +113,6 @@ __m512d evaluate(__m512d zReal, __m512d zImag, __m512d cReal, __m512d cImag)
   __m512d one = _mm512_set1_pd(1.0);
   smoothing = _mm512_fmadd_pd(smoothing, negInvLog2, one);
   escapeIter = _mm512_mask_add_pd(escapeIter, ~active, escapeIter, smoothing);
-  __m512d two = _mm512_set1_pd(2.0);
-  __m512d twoHundred = _mm512_set1_pd(200.0);
-  escapeIter = _mm512_div_pd(escapeIter, _mm512_fmadd_pd(two, escapeIter, twoHundred));
   return escapeIter;
 }
 

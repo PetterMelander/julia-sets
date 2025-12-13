@@ -47,7 +47,7 @@ public:
 
   glm::mat4 GetTransform()
   {
-    return projection * glm::lookAt(front, glm::vec3(0.0f, 0.35f, 0.0f), up);
+    return projection * glm::lookAt(front, glm::vec3(0.0f, 0.0f, 0.0f), up);
   }
 
   // processes input received from any keyboard-like input system. Accepts input
@@ -81,7 +81,7 @@ private:
     newFront.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
     newFront.y = sin(glm::radians(pitch));
     newFront.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
-    front = glm::normalize(newFront) * zoom;
+    front = glm::normalize(newFront) * zoom * 1.5f;
     // also re-calculate the up vector
     glm::vec3 right = glm::normalize(glm::cross(front, glm::vec3(0.0f, 1.0f, 0.0f)));
     up = glm::normalize(glm::cross(right, front));

@@ -1,4 +1,4 @@
-
+#include <array>
 #include <cmath>
 #include <iostream>
 #include <memory>
@@ -61,7 +61,7 @@ Window3D::Window3D(int width, int height) : width(width), height(height)
   }
 
   constexpr size_t aoNumSamples = 16;
-  std::uniform_real_distribution<float> randomAngles(0.0, 2 * M_PIf32);
+  std::uniform_real_distribution<float> randomAngles(0.0, 2 * glm::pi<float>());
   std::uniform_real_distribution<float> randomRadii(0.0, 1.0);
   std::default_random_engine generator;
   std::array<glm::vec2, aoNumSamples> aoKernel;
