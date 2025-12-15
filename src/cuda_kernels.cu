@@ -38,7 +38,8 @@ __device__ float evaluate(float2 z, const float2 c)
   float retval;
   if (escapeIter < MAX_ITERS)
   {
-    retval = escapeIter + 1.0f - __logf(__logf(__fsqrt_rn(escapeAbs2))) / logf(2.0f);
+    // 1 - log(log(abs(z)))/log(2) = 2 - log2(ln(abs(z²)))
+    retval = escapeIter + 2.0f - __log2f(__logf(escapeAbs2));
   }
   else
   {
@@ -47,16 +48,16 @@ __device__ float evaluate(float2 z, const float2 c)
   return retval;
 }
 
-__global__ void julia(float *const __restrict__ buffer, const float2 range, const float2 offsets,
-                      const float2 c, const int width, const int height)
+__global__ void julia(float *const __restrict__ buffer, const float2 planeTopLeft,
+                      const float2 pixelStep, const float2 c, const int width, const int height)
 {
   int xIdx = blockIdx.x * blockDim.x + threadIdx.x;
   int yIdx = blockIdx.y * blockDim.y + threadIdx.y;
 
   if (xIdx < width && yIdx < height)
   {
-    float re = ((float)xIdx / (width - 1)) * range.x * 2 - range.x - offsets.x; // todo: move repeated calculations out of kernel.
-    float im = ((float)yIdx / (height - 1)) * range.y * 2 - range.y - offsets.y;
+    float re = planeTopLeft.x + (float)xIdx * pixelStep.x;
+    float im = planeTopLeft.y + (float)yIdx * pixelStep.y;
     float2 z{re, im};
 
     float intensity = evaluate(z, c);
@@ -68,18 +69,24 @@ void computeJuliaCuda(int width, int height, std::complex<double> c, double zoom
                       double xOffset, double yOffset, float *buffer, cudaStream_t stream)
 {
   float2 C = make_float2(c.real(), c.imag());
-  float2 offsets = make_float2(xOffset, yOffset);
 
-  float2 range;
   int minDim = std::min(width, height);
-  range.x = (float)width / (minDim * zoomLevel);
-  range.y = (float)height / (minDim * zoomLevel);
+  float viewWidth = 2.0f * ((float)width / (minDim * zoomLevel));
+  float viewHeight = 2.0f * ((float)height / (minDim * zoomLevel));
+  
+  float2 pixelStep;
+  pixelStep.x = viewWidth / (width - 1);
+  pixelStep.y = viewHeight / (height - 1);
+
+  float2 planeTopLeft;
+  planeTopLeft.x = -(viewWidth / 2.0f) - (float)xOffset;
+  planeTopLeft.y = -(viewHeight / 2.0f) - (float)yOffset;
 
   unsigned int gridHeight = (height + BLOCK_SIZE_JULIA - 1) / BLOCK_SIZE_JULIA;
   unsigned int gridWidth = (width + BLOCK_SIZE_JULIA - 1) / BLOCK_SIZE_JULIA;
   dim3 gridDims{gridWidth, gridHeight};
   dim3 blockDims{BLOCK_SIZE_JULIA, BLOCK_SIZE_JULIA};
-  julia<<<gridDims, blockDims, 0, stream>>>(buffer, range, offsets, C, width, height);
+  julia<<<gridDims, blockDims, 0, stream>>>(buffer, planeTopLeft, pixelStep, C, width, height);
   CUDA_CHECK(cudaGetLastError());
 }
 

@@ -85,6 +85,10 @@ int main()
   }
   Window2D window2d = Window2D(width, height, windowPtr);
 
+
+  int frameCount = 0;
+  auto clock = std::chrono::high_resolution_clock();
+  auto start = clock.now();
   while (!glfwWindowShouldClose(window2d.windowPtr))
   {
     window2d.updateState();
@@ -118,9 +122,19 @@ int main()
     else
     {
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      --frameCount;
     }
 
     glfwPollEvents();
+
+    if (++frameCount == 6283)
+    {
+      auto end = clock.now();
+      std::chrono::duration<double> diff = end - start;
+      std::cout << "fps: " << 6283 / diff.count() << std::endl;
+      frameCount = 0;
+      start = clock.now();
+    }
   }
   glfwTerminate();
 
