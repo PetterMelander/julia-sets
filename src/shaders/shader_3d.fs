@@ -82,6 +82,7 @@ void main()
 
     float shadow = shadowCalculation(fragPosLightSpace, norm);
     color = ((1.0 - occlusion) * ambient + (1.0 - shadow) * (diffuse + specular)) * color;
+    // FragColor = vec4(color, 1.0);
     FragColor = vec4(pow(color, gammaInv), 1.0);
     // FragColor = vec4(vec3(occlusion), 1.0);
 }

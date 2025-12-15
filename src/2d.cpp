@@ -66,8 +66,24 @@ int main()
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+  #ifndef NDEBUG
+  glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, true);
+  #endif
+  
+  GLFWwindow *windowPtr;
+  windowPtr = glfwCreateWindow(width, height, "Julia", NULL, NULL);
+  if (windowPtr == NULL)
+  {
+    std::cout << "Failed to create window" << std::endl;
+    glfwTerminate();
+  }
+  glfwMakeContextCurrent(windowPtr);
 
-  Window2D window2d = Window2D(width, height);
+  if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
+  {
+    std::cout << "Failed to initialize GLAD" << std::endl;
+  }
+  Window2D window2d = Window2D(width, height, windowPtr);
 
   while (!glfwWindowShouldClose(window2d.windowPtr))
   {
@@ -90,12 +106,14 @@ int main()
       }
 
       window2d.redraw();
+      window2d.swap();
     }
     else if (window2d.needsTextureSwitch)
     {
       window2d.switchBuffer();
       window2d.redraw();
       window2d.switchBuffer();
+      window2d.swap();
     }
     else
     {

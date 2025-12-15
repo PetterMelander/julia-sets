@@ -61,9 +61,9 @@ public:
     if (direction == BACKWARD)
       pitch -= velocity;
     if (direction == LEFT)
-      yaw -= velocity;
-    if (direction == RIGHT)
       yaw += velocity;
+    if (direction == RIGHT)
+      yaw -= velocity;
 
     if (pitch > 89.0f)
       pitch = 89.0f;

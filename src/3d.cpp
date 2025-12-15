@@ -51,7 +51,7 @@ void computeJulia_sp_3d(Window2D &window, cudaGraphicsResource *cudaPbo2d,
   ctx.hStream = stream;
   NPP_CHECK(nppiFilterGaussBorder_32f_C1R_Ctx(
       dTexBuffer2d, sizeof(float) * window.width, size, NppiPoint{0, 0},
-      dTexBuffer3d, sizeof(float) * window.width, size, NPP_MASK_SIZE_9_X_9,
+      dTexBuffer3d, sizeof(float) * window.width, size, NPP_MASK_SIZE_5_X_5,
       NPP_BORDER_REPLICATE, ctx));
   size = {window.width / 2, window.height / 2};
   NPP_CHECK(nppiMinMax_32f_C1R_Ctx(dTexBuffer3d + window.height / 4 * window.width + window.width / 4, sizeof(float) * window.width, size, dImgMin, dImgMax, dNppistBuffer, ctx));
@@ -107,8 +107,8 @@ void computeJulia_dp_3d(Window2D &window, float *hCudaBuffer,
 
 int main()
 {
-  int width = 2048;
-  int height = 2048;
+  int width = 1920;
+  int height = 2160;
 
   // width must be multiple of 8 for avx kernel to work
   width = (width + 7) / 8 * 8;
@@ -140,9 +140,33 @@ int main()
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+  glfwWindowHint(GLFW_SAMPLES, 4);
+  #ifndef NDEBUG
+  glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, true);
+  #endif
+  
+  GLFWmonitor* primaryMonitor = glfwGetPrimaryMonitor();
+  const GLFWvidmode* mode = glfwGetVideoMode(primaryMonitor);
+  glfwWindowHint(GLFW_RED_BITS, mode->redBits);
+  glfwWindowHint(GLFW_GREEN_BITS, mode->greenBits);
+  glfwWindowHint(GLFW_BLUE_BITS, mode->blueBits);
+  glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
 
-  Window2D window2d = Window2D(width, height);
-  Window3D window3d = Window3D(width, height);
+  GLFWwindow *windowPtr;
+  windowPtr = glfwCreateWindow(width * 2, height, "Julia", primaryMonitor, NULL);
+  if (windowPtr == NULL)
+  {
+    std::cout << "Failed to create window" << std::endl;
+    glfwTerminate();
+  }
+  glfwMakeContextCurrent(windowPtr);
+
+  if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
+  {
+    std::cout << "Failed to initialize GLAD" << std::endl;
+  }
+  Window2D window2d = Window2D(width, height, windowPtr);
+  Window3D window3d = Window3D(width, height, windowPtr);
 
   int frameCount = 0;
   auto clock = std::chrono::high_resolution_clock();
@@ -185,7 +209,7 @@ int main()
       window2d.redraw();
       window3d.redraw();
       window3d.updateView();
-      window3d.swap();
+
       window2d.swap();
     }
     else if (window2d.needsTextureSwitch)
@@ -198,16 +222,18 @@ int main()
       window3d.updateView();
       window3d.redraw();
       window3d.switchBuffer();
-      window3d.swap();
+
       window2d.swap();
     }
     else if (window3d.needsRedraw)
     {
       window3d.switchBuffer();
       window3d.updateView();
-      window3d.redraw();
-      window3d.swap();
+      window2d.redraw(false);
+      window3d.redraw(false);
       window3d.switchBuffer();
+
+      window3d.swap();
     }
     else
     {

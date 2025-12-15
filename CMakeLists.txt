@@ -25,7 +25,7 @@ if(WIN32)
     )
     FetchContent_MakeAvailable(glm)
 else()
-    set(NPP_LIBS CUDA::nppif CUDA::nppist CUDA::nppc)
+    set(NPP_LIBS CUDA::nppif_static CUDA::nppist_static CUDA::nppc_static)
 endif()
 
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O3 --use_fast_math --extra-device-vectorization --ptxas-options=-O3 -lineinfo")

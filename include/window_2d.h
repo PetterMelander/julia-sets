@@ -42,7 +42,7 @@ public:
   bool needsTextureSwitch = false;
   bool paused = false;
 
-  Window2D(int width, int height);
+  Window2D(int width, int height, GLFWwindow *windowPtr);
 
   ~Window2D();
 
@@ -57,13 +57,14 @@ public:
     }
   }
 
-  void redraw()
+  void redraw(bool switchTex = true)
   {
-    CUDA_CHECK(cudaStreamSynchronize(streams[activeBuffer]));
-
-    glfwMakeContextCurrent(windowPtr);
-    switchTexture(activeBuffer);
-    redrawImage();
+    if (switchTex)
+    {
+      CUDA_CHECK(cudaStreamSynchronize(streams[activeBuffer]));
+      switchTexture(activeBuffer);
+    }
+      redrawImage();
     if (needsRedraw)
     {
       needsRedraw = false;
@@ -85,7 +86,6 @@ public:
   int getNextBufferIndex() { return (activeBuffer + 1) % 2; }
 
   void swap() {
-    glfwMakeContextCurrent(windowPtr);
     glfwSwapBuffers(windowPtr);
   }
 
@@ -94,7 +94,6 @@ private:
   GLuint texture;
   GLuint vao;
   GLuint vbo;
-  GLuint ebo;
 
   std::unique_ptr<Shader> shader;
 
@@ -117,8 +116,8 @@ private:
     {
       double xPos, yPos;
       glfwGetCursorPos(windowPtr, &xPos, &yPos);
-      xOffset -= (lastMouseX - xPos) / width / zoomLevel * 2;
-      yOffset += (lastMouseY - yPos) / height / zoomLevel * 2;
+      xOffset -= (lastMouseX - xPos) / std::min(width, height) / zoomLevel * 2;
+      yOffset += (lastMouseY - yPos) / std::min(width, height) / zoomLevel * 2;
 
       lastMouseX = xPos;
       lastMouseY = yPos;
@@ -155,15 +154,15 @@ private:
 
   void redrawImage()
   {
-    glClear(GL_COLOR_BUFFER_BIT);
+    glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
+    
+    glViewport(0, 0, width, height);
     shader->use();
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, texture);
 
     glBindVertexArray(vao);
-    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-
-    // glfwSwapBuffers(windowPtr);
-  }
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    }
 };

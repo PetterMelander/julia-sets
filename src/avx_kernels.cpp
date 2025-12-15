@@ -151,7 +151,7 @@ void julia(unsigned char *intensities, float range, float xOffset,
   }
 }
 
-void julia(float *intensities, double range, double xOffset, double yOffset,
+void julia(float *intensities, double xRange, double yRange, double xOffset, double yOffset,
            double cReal, double cImag, int width, int height)
 {
 
@@ -160,7 +160,7 @@ void julia(float *intensities, double range, double xOffset, double yOffset,
   __m512d cImagVec = _mm512_set1_pd(cImag);
 
   // get deltas for vectorizing real part
-  double reDelta = (2.0 * range) / (width - 1);
+  double reDelta = (2.0 * xRange) / (width - 1);
   __m512d reDeltaVec = _mm512_set1_pd(reDelta);
   __m512i indexIvec = _mm512_set_epi64(7, 6, 5, 4, 3, 2, 1, 0);
   __m512d indexVec = _mm512_cvtepi64_pd(indexIvec);
@@ -169,13 +169,13 @@ void julia(float *intensities, double range, double xOffset, double yOffset,
   for (int y = 0; y < height; ++y)
   {
     // vectorize imaginary part (const across vector)
-    double im = ((double)y / (height - 1)) * range * 2 - range - yOffset;
+    double im = ((double)y / (height - 1)) * yRange * 2 - yRange - yOffset;
     __m512d zImagVec = _mm512_set1_pd(im);
 
     for (int x = 0; x < width; x += VEC_SIZE_DP)
     {
       // vectorize real part (8 consecutive pixels in a row)
-      double re = ((double)x / (width - 1)) * range * 2 - range - xOffset;
+      double re = ((double)x / (width - 1)) * xRange * 2 - xRange - xOffset;
       __m512d zRealVec = _mm512_set1_pd(re);
       zRealVec = _mm512_fmadd_pd(indexVec, reDeltaVec, zRealVec);
 
@@ -193,5 +193,8 @@ void computeJuliaAvx(int width, int height, std::complex<double> c,
                      double zoomLevel, double xOffset, double yOffset,
                      float *buffer)
 {
-  julia(buffer, 1.0 / zoomLevel, xOffset, yOffset, c.real(), c.imag(), width, height);
+  int minDim = std::min(width, height);
+  double xRange = (double)width / (minDim * zoomLevel);
+  double yRange = (double)height / (minDim * zoomLevel);
+  julia(buffer, xRange, yRange, xOffset, yOffset, c.real(), c.imag(), width, height);
 }

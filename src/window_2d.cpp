@@ -85,31 +85,9 @@ void APIENTRY glDebugOutput(GLenum source, GLenum type, unsigned int id,
 }
 #endif
 
-Window2D::Window2D(int width, int height) : width(width), height(height)
+Window2D::Window2D(int width, int height, GLFWwindow *windowPtr)
+: windowPtr(windowPtr), width(width), height(height)
 {
-
-  // create window
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
-  glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-  glfwWindowHint(GLFW_SAMPLES, 0);
-
-#ifndef NDEBUG
-  glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, true);
-#endif
-
-  windowPtr = glfwCreateWindow(width, height, "Julia", NULL, NULL);
-  if (windowPtr == NULL)
-  {
-    std::cout << "Failed to create 2D window" << std::endl;
-    glfwTerminate();
-  }
-  glfwMakeContextCurrent(windowPtr);
-
-  if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
-  {
-    std::cout << "Failed to initialize GLAD" << std::endl;
-  }
 
 #ifndef NDEBUG
   int flags;
@@ -145,23 +123,21 @@ Window2D::Window2D(int width, int height) : width(width), height(height)
   glBindTexture(GL_TEXTURE_2D, texture);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, width, height, 0, GL_RED, GL_FLOAT,
-               0);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, width, height, 0, GL_RED, GL_FLOAT, 0);
 
   glGenVertexArrays(1, &vao);
   glBindVertexArray(vao);
 
-  float vertices[] = {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, -1.0f, 1.0f, 0.0f,
-                      -1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 1.0f, 0.0f, 1.0f};
+
+  float quadVertices[] = {
+   -1.0f,  1.0f, 0.0f, 1.0f,
+   -1.0f, -1.0f, 0.0f, 0.0f,
+    1.0f,  1.0f, 1.0f, 1.0f,
+    1.0f, -1.0f, 1.0f, 0.0f,
+  };
   glGenBuffers(1, &vbo);
   glBindBuffer(GL_ARRAY_BUFFER, vbo);
-  glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-  unsigned int indices[] = {0, 1, 3, 1, 2, 3};
-  glGenBuffers(1, &ebo);
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-  glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices,
-               GL_STATIC_DRAW);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), quadVertices, GL_STATIC_DRAW);
 
   glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)0);
   glEnableVertexAttribArray(0);
@@ -173,7 +149,6 @@ Window2D::Window2D(int width, int height) : width(width), height(height)
   glfwSwapInterval(0);
   glfwSetWindowUserPointer(windowPtr, this);
 
-  glViewport(0, 0, width, height);
   glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
   glfwSetScrollCallback(windowPtr, scrollCallback);

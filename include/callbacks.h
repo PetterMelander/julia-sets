@@ -34,8 +34,13 @@ inline void scrollCallback(GLFWwindow *window, double xOffset, double yOffset)
 
   double xPos, yPos;
   glfwGetCursorPos(window, &xPos, &yPos);
-  window2d->xOffset -= (1.0 - 1.0 / 1.1) * (xPos / window2d->width - 0.5) * 2.0 / oldZoom;
-  window2d->yOffset += (1.0 - 1.0 / 1.1) * (yPos / window2d->height - 0.5) * 2.0 / oldZoom;
+  int width = window2d->width;
+  int height = window2d->height;
+  int minDim = std::min(width, height);
+  float xScale = (float)width / minDim;
+  float yScale = (float)height / minDim;
+  window2d->xOffset -= (1.0 - 1.0 / 1.1) * (xPos / window2d->width - 0.5) * xScale * 2.0 / oldZoom;
+  window2d->yOffset += (1.0 - 1.0 / 1.1) * (yPos / window2d->height - 0.5) * yScale * 2.0 / oldZoom;
 
   window2d->needsRedraw = true;
 }
@@ -61,8 +66,7 @@ inline void mouseButtonCallback(GLFWwindow *window, int button, int action,
   }
 }
 
-inline void keyCallback(GLFWwindow *window, int key, int scancode, int action,
-                         int mods)
+inline void keyCallback(GLFWwindow *window, int key, int scancode, int action, int mods)
 {
   if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
   {

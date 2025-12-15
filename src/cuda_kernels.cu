@@ -47,7 +47,7 @@ __device__ float evaluate(float2 z, const float2 c)
   return retval;
 }
 
-__global__ void julia(float *const __restrict__ buffer, const float range, const float2 offsets,
+__global__ void julia(float *const __restrict__ buffer, const float2 range, const float2 offsets,
                       const float2 c, const int width, const int height)
 {
   int xIdx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -55,8 +55,8 @@ __global__ void julia(float *const __restrict__ buffer, const float range, const
 
   if (xIdx < width && yIdx < height)
   {
-    float re = ((float)xIdx / (width - 1)) * range * 2 - range - offsets.x;
-    float im = ((float)yIdx / (height - 1)) * range * 2 - range - offsets.y;
+    float re = ((float)xIdx / (width - 1)) * range.x * 2 - range.x - offsets.x; // todo: move repeated calculations out of kernel.
+    float im = ((float)yIdx / (height - 1)) * range.y * 2 - range.y - offsets.y;
     float2 z{re, im};
 
     float intensity = evaluate(z, c);
@@ -70,11 +70,16 @@ void computeJuliaCuda(int width, int height, std::complex<double> c, double zoom
   float2 C = make_float2(c.real(), c.imag());
   float2 offsets = make_float2(xOffset, yOffset);
 
-  unsigned int NumBlocks = (width + BLOCK_SIZE_JULIA - 1) / BLOCK_SIZE_JULIA;
+  float2 range;
+  int minDim = std::min(width, height);
+  range.x = (float)width / (minDim * zoomLevel);
+  range.y = (float)height / (minDim * zoomLevel);
+
+  unsigned int gridHeight = (height + BLOCK_SIZE_JULIA - 1) / BLOCK_SIZE_JULIA;
+  unsigned int gridWidth = (width + BLOCK_SIZE_JULIA - 1) / BLOCK_SIZE_JULIA;
+  dim3 gridDims{gridWidth, gridHeight};
   dim3 blockDims{BLOCK_SIZE_JULIA, BLOCK_SIZE_JULIA};
-  dim3 gridDims{NumBlocks, NumBlocks};
-  julia<<<gridDims, blockDims, 0, stream>>>(buffer, (float)(1.0 / zoomLevel),
-                                            offsets, C, width, height);
+  julia<<<gridDims, blockDims, 0, stream>>>(buffer, range, offsets, C, width, height);
   CUDA_CHECK(cudaGetLastError());
 }
 
@@ -111,9 +116,6 @@ __global__ void compute_normals(const float *__restrict__ const h, float2 *__res
   To reduce memory bandwidth usage, the constant y coordinate is not written to global memory. It is
   instead left to the vertex shader to compute. Similarly, the constants ystep and xstep from the
   x and z coordinates are left to the vertex shader to compute.
-
-  The height values are transformed to produce more visually appealing shapes. This transform must
-  match the transform also applied in the vertex shader.
   */
   constexpr int HALO = 1;
   constexpr int TILE_H = BLOCK_H + 2 * HALO;
