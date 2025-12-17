@@ -98,8 +98,7 @@ Window2D::Window2D(int width, int height, GLFWwindow *windowPtr)
     glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS); // Makes sure errors are displayed at
                                            // the moment they happen
     glDebugMessageCallback(glDebugOutput, nullptr);
-    glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr,
-                          GL_TRUE);
+    glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_TRUE);
   }
 #endif
 
@@ -128,7 +127,6 @@ Window2D::Window2D(int width, int height, GLFWwindow *windowPtr)
   glGenVertexArrays(1, &vao);
   glBindVertexArray(vao);
 
-
   float quadVertices[] = {
    -1.0f,  1.0f, 0.0f, 1.0f,
    -1.0f, -1.0f, 0.0f, 0.0f,
@@ -141,12 +139,11 @@ Window2D::Window2D(int width, int height, GLFWwindow *windowPtr)
 
   glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)0);
   glEnableVertexAttribArray(0);
-  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float),
-                        (void *)(2 * sizeof(float)));
+  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)(2 * sizeof(float)));
   glEnableVertexAttribArray(1);
 
   // set window parameters and callbacks
-  glfwSwapInterval(0);
+  glfwSwapInterval(1);
   glfwSetWindowUserPointer(windowPtr, this);
 
   glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -160,10 +157,16 @@ Window2D::Window2D(int width, int height, GLFWwindow *windowPtr)
   shader = std::make_unique<Shader>("shaders/shader_2d.vs", "shaders/shader_2d.fs");
   shader->use();
   shader->setInt("texture1", 0);
+
+  // init Npp vars
+  CUDA_CHECK(cudaMalloc(&dUpdateRelativeError, sizeof(Npp64f)));
+  CUDA_CHECK(cudaMallocHost(&hUpdateRelativeError, sizeof(double)));
 }
 
 Window2D::~Window2D()
 {
   cudaFreeHost(hCudaBuffers[0]);
   cudaFreeHost(hCudaBuffers[1]);
+  cudaFree(dUpdateRelativeError);
+  cudaFreeHost(hUpdateRelativeError);
 }

@@ -5,11 +5,12 @@
 #include <iostream>
 #include <memory>
 
-#include <GLFW/glfw3.h>
 #include <glad/glad.h>
+#include <GLFW/glfw3.h>
 
 #include <cuda_gl_interop.h>
 #include <cuda_runtime.h>
+#include <nppcore.h>
 
 #include "cuda_kernels.cuh"
 #include "shader.h"
@@ -22,6 +23,9 @@ public:
   float *hCudaBuffers[2];
   cudaGraphicsResource *cudaPboResources[2];
   cudaStream_t streams[2];
+
+  Npp64f *dUpdateRelativeError;
+  double *hUpdateRelativeError;
 
   std::complex<double> c;
   double theta = 0.0;
@@ -48,6 +52,7 @@ public:
 
   void updateState()
   {
+    CUDA_CHECK(cudaStreamSynchronize(streams[(activeBuffer + 1) % 2]));
     updateTheta();
     updatePan();
 
@@ -61,7 +66,6 @@ public:
   {
     if (switchTex)
     {
-      CUDA_CHECK(cudaStreamSynchronize(streams[activeBuffer]));
       switchTexture(activeBuffer);
     }
       redrawImage();
@@ -102,8 +106,12 @@ private:
   static constexpr double d = 0.3;
   static constexpr double length = 0.7885;
 
+  double lastThetaUpdate = 0;
+
   void updateC()
   {
+    // c.real(sin(sqrt(2.0) * theta));
+    // c.imag(sin(theta));
     // c.real((R - r) * cos(theta) + d * cos((R - r) * theta / r));
     // c.imag((R - r) * sin(theta) - d * sin((R - r) * theta / r));
     c.real(length * cos(theta));
@@ -129,7 +137,9 @@ private:
   {
     if (!paused)
     {
-      theta += 0.001;
+      double thetaUpdate = 0.8 * lastThetaUpdate + std::min(0.001, exp(-*hUpdateRelativeError * 10000)) + 0.00001;
+      theta += std::min(lastThetaUpdate * 2.0, thetaUpdate);
+      lastThetaUpdate = thetaUpdate;
       needsRedraw = true;
     }
     else if (glfwGetKey(windowPtr, GLFW_KEY_LEFT) == GLFW_PRESS)

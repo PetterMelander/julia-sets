@@ -23,7 +23,7 @@ inline void scrollCallback(GLFWwindow *window, double xOffset, double yOffset)
   Window2D *window2d = static_cast<Window2D *>(glfwGetWindowUserPointer(window));
 
   double oldZoom = window2d->zoomLevel;
-  if (yOffset > 0)
+  if (yOffset > 0.0)
   {
     window2d->zoomLevel *= 1.1;
   }
@@ -45,8 +45,7 @@ inline void scrollCallback(GLFWwindow *window, double xOffset, double yOffset)
   window2d->needsRedraw = true;
 }
 
-inline void mouseButtonCallback(GLFWwindow *window, int button, int action,
-                                  int mods)
+inline void mouseButtonCallback(GLFWwindow *window, int button, int action, int mods)
 {
   Window2D *window2d = static_cast<Window2D *>(glfwGetWindowUserPointer(window));
 

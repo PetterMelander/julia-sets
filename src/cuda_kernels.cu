@@ -16,7 +16,7 @@ __device__ __forceinline__ void operator+=(float2 &a, const float2 b)
 
 __device__ float evaluate(float2 z, const float2 c)
 {
-  constexpr int MAX_ITERS = 1000;
+  constexpr int MAX_ITERS = 2500;
   constexpr float R = 2.0f;
 
   float escapeIter = MAX_ITERS;
@@ -211,11 +211,13 @@ __global__ void scaleImage(const int dsize, const float *__restrict__ const imgM
   {
     min = __ldg(imgMin);
     float max = __ldg(imgMax);
+    // scale = 1.0f / (max - min);
     scale = 10.0f / (max - min);
   }
   __syncthreads();
   if (idx < dsize)
   {
+    // h[idx] = (h[idx] - min) * scale * 0.25f;
     h[idx] = expf(-(h[idx] - min) * scale) * 0.25f;
   }
 }

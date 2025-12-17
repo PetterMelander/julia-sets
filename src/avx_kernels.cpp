@@ -4,7 +4,7 @@
 #include <immintrin.h>
 #include <omp.h>
 
-constexpr int MAX_ITERS = 1000;
+constexpr int MAX_ITERS = 2500;
 constexpr float R_s = 2.0f;
 constexpr double R_d = 2.0;
 constexpr int VEC_SIZE_SP = 16;
