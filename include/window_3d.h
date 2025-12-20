@@ -38,6 +38,8 @@ public:
 
   void redraw(bool depthPass = true)
   {
+    if (glfwGetCurrentContext() != windowPtr)
+      glfwMakeContextCurrent(windowPtr);
     switchTexture(activeBuffer);
     redrawImage(activeBuffer, depthPass);
   }
