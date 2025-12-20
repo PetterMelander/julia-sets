@@ -29,25 +29,22 @@ public:
 
   Camera camera{width, height};
 
-  Window3D(int width, int height);
+  Window3D(int width, int height, GLFWwindow *windowPtr);
 
   void updateState()
   {
     processMovement(0.01);
   }
 
-  void redraw()
+  void redraw(bool depthPass = true)
   {
-    if (glfwGetCurrentContext() != windowPtr)
-      glfwMakeContextCurrent(windowPtr);
     switchTexture(activeBuffer);
-    redrawImage(activeBuffer);
+    redrawImage(activeBuffer, depthPass);
   }
 
   void updateView()
   {
-    if (glfwGetCurrentContext() != windowPtr)
-      glfwMakeContextCurrent(windowPtr);
+    shader->use();
     glm::mat4 transform = camera.GetTransform();
     shader->setMat4("lookAt", transform);
   }
@@ -62,7 +59,6 @@ public:
   int getNextBufferIndex() { return (activeBuffer + 1) % 2; }
 
   void swap() {
-    // glfwMakeContextCurrent(windowPtr);
     glfwSwapBuffers(windowPtr);
   }
 
@@ -78,8 +74,8 @@ private:
   GLuint depthMapFBO;
   GLuint depthMap;
   
-  constexpr static unsigned int SHADOW_WIDTH = 4096;
-  constexpr static unsigned int SHADOW_HEIGHT = 4096;
+  unsigned int SHADOW_WIDTH = width * 4;
+  unsigned int SHADOW_HEIGHT = height * 4;
   const glm::mat4 lightProjection = glm::ortho(-1.0f, 1.0f, -1.0f, 1.0f, 0.4f, 1.5f);
   const glm::mat4 lightView = glm::lookAt(glm::vec3(0.4472135955, 0.894427191, 0.0),
                                           glm::vec3(0.0f, 0.0f, 0.0f),
@@ -95,23 +91,24 @@ private:
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RED, GL_FLOAT, 0);
   }
 
-  void redrawImage(int index)
+  void redrawImage(int index, bool depthPass = true)
   {
-    // depth pass
-    depthShader->use();
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, heightMap);
+    
+    if (depthPass) {
+      depthShader->use();
+      glActiveTexture(GL_TEXTURE1);
+      glBindTexture(GL_TEXTURE_2D, heightMap);
 
-    glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
-    glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
+      glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
+      glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
       glClear(GL_DEPTH_BUFFER_BIT);
       glBindVertexArray(vaoIds[index]);
       glDrawElements(GL_TRIANGLES, 3 * 2 * (height - 1) * (width - 1), GL_UNSIGNED_INT, 0);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+      glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
 
     // main pass
-    glViewport(0, 0, width, height);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glViewport(width, 0, width, height);
     glEnable(GL_MULTISAMPLE);
 
     shader->use();
@@ -127,15 +124,10 @@ private:
     glDisable(GL_MULTISAMPLE);
 
     needsRedraw = false;
-
-    // glfwSwapBuffers(windowPtr);
   }
 
   void processMovement(float deltaTime)
   {
-    if (glfwGetKey(windowPtr, GLFW_KEY_ESCAPE) == GLFW_PRESS)
-      glfwSetWindowShouldClose(windowPtr, true);
-
     if (glfwGetKey(windowPtr, GLFW_KEY_W) == GLFW_PRESS)
     {
       camera.ProcessKeyboard(FORWARD, deltaTime);

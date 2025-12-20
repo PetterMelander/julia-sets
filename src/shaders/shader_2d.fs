@@ -10,7 +10,7 @@ const vec3 kPhases = vec3(5.423, 4.359, 1.150);
 void main()
 {
     float intensity = texture(texture1, TexCoord).r;
-    if (intensity < 1000.0)
+    if (intensity < 2500.0)
     {
         FragColor.rgb = sin(vec3(intensity * 0.05) + kPhases) * 0.5 + 0.5;
         FragColor.a = 1.0;

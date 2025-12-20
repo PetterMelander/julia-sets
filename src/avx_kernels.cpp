@@ -4,7 +4,7 @@
 #include <immintrin.h>
 #include <omp.h>
 
-constexpr int MAX_ITERS = 1000;
+constexpr int MAX_ITERS = 2500;
 constexpr float R_s = 2.0f;
 constexpr double R_d = 2.0;
 constexpr int VEC_SIZE_SP = 16;
@@ -44,21 +44,17 @@ __m512 evaluate(__m512 zReal, __m512 zImag, __m512 cReal, __m512 cImag)
     zReal = _mm512_add_ps(_mm512_sub_ps(zReal2, zImag2), cReal);
   }
 
-  // postprocess to reduce color banding: iter + 1 - log(log(abs(z)))/log(2)
-  __m512 smoothing = _mm512_sqrt_ps(escapeAbs2);
-
+  // postprocess to reduce color banding: iter + 1 - log(log(abs(z)))/log(2) = iter + 2 - log2(ln(abs(z²)))
   // let compiler auto vectorize log function since it is not avx intrinsic
   alignas(64) float temp[VEC_SIZE_SP];
-  _mm512_store_ps(temp, smoothing);
+  _mm512_store_ps(temp, escapeAbs2);
   for (int i = 0; i < VEC_SIZE_SP; ++i)
   {
-    temp[i] = logf(logf(temp[i]));
+    temp[i] = log2f(logf(temp[i]));
   }
-  smoothing = _mm512_load_ps(temp);
-
-  __m512 negInvLog2 = _mm512_set1_ps(-1.0f / logf(2.0f));
-  __m512 one = _mm512_set1_ps(1.0f);
-  smoothing = _mm512_fmadd_ps(smoothing, negInvLog2, one);
+  __m512 smoothing = _mm512_load_ps(temp);
+  __m512 two = _mm512_set1_ps(2.0f);
+  smoothing = _mm512_sub_ps(two, smoothing);
   escapeIter = _mm512_mask_add_ps(escapeIter, ~active, escapeIter, smoothing);
   return escapeIter;
 }
@@ -97,27 +93,23 @@ __m512d evaluate(__m512d zReal, __m512d zImag, __m512d cReal, __m512d cImag)
     zReal = _mm512_add_pd(_mm512_sub_pd(zReal2, zImag2), cReal);
   }
 
-  // postprocess to reduce color banding: iter + 1 - log(log(abs(z)))/log(2)
-  __m512d smoothing = _mm512_sqrt_pd(escapeAbs2);
-
+  // postprocess to reduce color banding: iter + 1 - log(log(abs(z)))/log(2) = iter + 2 - log2(ln(abs(z²)))
   // let compiler auto vectorize log function since it is not avx intrinsic
   alignas(64) double temp[VEC_SIZE_DP];
-  _mm512_store_pd(temp, smoothing);
+  _mm512_store_pd(temp, escapeAbs2);
   for (int i = 0; i < VEC_SIZE_DP; ++i)
   {
-    temp[i] = log(log(temp[i]));
+    temp[i] = log2(log(temp[i]));
   }
-  smoothing = _mm512_load_pd(temp);
-
-  __m512d negInvLog2 = _mm512_set1_pd(-1.0 / log(2.0));
-  __m512d one = _mm512_set1_pd(1.0);
-  smoothing = _mm512_fmadd_pd(smoothing, negInvLog2, one);
+  __m512d smoothing = _mm512_load_pd(temp);
+  __m512d two = _mm512_set1_pd(2.0);
+  smoothing = _mm512_sub_pd(two, smoothing);
   escapeIter = _mm512_mask_add_pd(escapeIter, ~active, escapeIter, smoothing);
   return escapeIter;
 }
 
-void julia(unsigned char *intensities, float range, float xOffset,
-           float yOffset, float cReal, float cImag, int width, int height)
+void julia(float *intensities, float planeTopLeftX, float planeTopLeftY, float pixelStepX,
+           float pixelStepY, float cReal, double cImag, int width, int height)
 {
 
   // vectorize c
@@ -125,8 +117,7 @@ void julia(unsigned char *intensities, float range, float xOffset,
   __m512 cImagVec = _mm512_set1_ps(cImag);
 
   // get deltas for vectorizing real part
-  float reDelta = (2.0f * range) / (width - 1);
-  __m512 reDeltaVec = _mm512_set1_ps(reDelta);
+  __m512 pixelStepVecX = _mm512_set1_ps(pixelStepX);
   __m512i indexIvec = _mm512_set_epi32(15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0);
   __m512 indexVec = _mm512_cvtepi32_ps(indexIvec);
 
@@ -134,15 +125,15 @@ void julia(unsigned char *intensities, float range, float xOffset,
   for (int y = 0; y < height; ++y)
   {
     // vectorize imaginary part (const across vector)
-    float im = ((float)y / (height - 1)) * range * 2 - range - yOffset;
+    float im = planeTopLeftY + y * pixelStepY;
     __m512 zImagVec = _mm512_set1_ps(im);
 
     for (int x = 0; x < width; x += VEC_SIZE_SP)
     {
       // vectorize real part (16 consecutive pixels in a row)
-      float re = ((float)x / (width - 1)) * range * 2 - range - xOffset;
+      float re = planeTopLeftX + x * pixelStepX;
       __m512 zRealVec = _mm512_set1_ps(re);
-      zRealVec = _mm512_fmadd_ps(indexVec, reDeltaVec, zRealVec);
+      zRealVec = _mm512_fmadd_ps(indexVec, pixelStepVecX, zRealVec);
 
       // evaluate pixels
       __m512 resultVec = evaluate(zRealVec, zImagVec, cRealVec, cImagVec);
@@ -151,8 +142,8 @@ void julia(unsigned char *intensities, float range, float xOffset,
   }
 }
 
-void julia(float *intensities, double range, double xOffset, double yOffset,
-           double cReal, double cImag, int width, int height)
+void julia(float *intensities, double planeTopLeftX, double planeTopLeftY, double pixelStepX,
+           double pixelStepY, double cReal, double cImag, int width, int height)
 {
 
   // vectorize c
@@ -160,8 +151,7 @@ void julia(float *intensities, double range, double xOffset, double yOffset,
   __m512d cImagVec = _mm512_set1_pd(cImag);
 
   // get deltas for vectorizing real part
-  double reDelta = (2.0 * range) / (width - 1);
-  __m512d reDeltaVec = _mm512_set1_pd(reDelta);
+  __m512d pixelStepVecX = _mm512_set1_pd(pixelStepX);
   __m512i indexIvec = _mm512_set_epi64(7, 6, 5, 4, 3, 2, 1, 0);
   __m512d indexVec = _mm512_cvtepi64_pd(indexIvec);
 
@@ -169,15 +159,15 @@ void julia(float *intensities, double range, double xOffset, double yOffset,
   for (int y = 0; y < height; ++y)
   {
     // vectorize imaginary part (const across vector)
-    double im = ((double)y / (height - 1)) * range * 2 - range - yOffset;
+    double im = planeTopLeftY + y * pixelStepY;
     __m512d zImagVec = _mm512_set1_pd(im);
 
     for (int x = 0; x < width; x += VEC_SIZE_DP)
     {
       // vectorize real part (8 consecutive pixels in a row)
-      double re = ((double)x / (width - 1)) * range * 2 - range - xOffset;
+      double re = planeTopLeftX + x * pixelStepX;
       __m512d zRealVec = _mm512_set1_pd(re);
-      zRealVec = _mm512_fmadd_pd(indexVec, reDeltaVec, zRealVec);
+      zRealVec = _mm512_fmadd_pd(indexVec, pixelStepVecX, zRealVec);
 
       // evaluate pixels
       __m512d resultVec = evaluate(zRealVec, zImagVec, cRealVec, cImagVec);
@@ -189,9 +179,20 @@ void julia(float *intensities, double range, double xOffset, double yOffset,
   }
 }
 
-void computeJuliaAvx(int width, int height, std::complex<double> c,
-                     double zoomLevel, double xOffset, double yOffset,
-                     float *buffer)
+void computeJuliaAvx(int width, int height, std::complex<double> c, double zoomLevel,
+                     double xOffset, double yOffset, float *buffer)
 {
-  julia(buffer, 1.0 / zoomLevel, xOffset, yOffset, c.real(), c.imag(), width, height);
+
+  int minDim = std::min(width, height);
+  double viewWidth = 2.0 * ((double)width / (minDim * zoomLevel));
+  double viewHeight = 2.0 * ((double)height / (minDim * zoomLevel));
+  
+  double pixelStepX = viewWidth / (width - 1);
+  double pixelStepY = viewHeight / (height - 1);
+
+  double planeTopLeftX = -(viewWidth / 2.0) - (double)xOffset;
+  double planeTopLeftY = -(viewHeight / 2.0) - (double)yOffset;
+
+  julia(buffer, planeTopLeftX, planeTopLeftY, pixelStepX,
+        pixelStepY, c.real(), c.imag(), width, height);
 }

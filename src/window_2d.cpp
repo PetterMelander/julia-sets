@@ -85,31 +85,9 @@ void APIENTRY glDebugOutput(GLenum source, GLenum type, unsigned int id,
 }
 #endif
 
-Window2D::Window2D(int width, int height) : width(width), height(height)
+Window2D::Window2D(int width, int height, GLFWwindow *windowPtr)
+: windowPtr(windowPtr), width(width), height(height)
 {
-
-  // create window
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
-  glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-  glfwWindowHint(GLFW_SAMPLES, 0);
-
-#ifndef NDEBUG
-  glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, true);
-#endif
-
-  windowPtr = glfwCreateWindow(width, height, "Julia", NULL, NULL);
-  if (windowPtr == NULL)
-  {
-    std::cout << "Failed to create 2D window" << std::endl;
-    glfwTerminate();
-  }
-  glfwMakeContextCurrent(windowPtr);
-
-  if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
-  {
-    std::cout << "Failed to initialize GLAD" << std::endl;
-  }
 
 #ifndef NDEBUG
   int flags;
@@ -120,8 +98,7 @@ Window2D::Window2D(int width, int height) : width(width), height(height)
     glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS); // Makes sure errors are displayed at
                                            // the moment they happen
     glDebugMessageCallback(glDebugOutput, nullptr);
-    glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr,
-                          GL_TRUE);
+    glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_TRUE);
   }
 #endif
 
@@ -145,35 +122,30 @@ Window2D::Window2D(int width, int height) : width(width), height(height)
   glBindTexture(GL_TEXTURE_2D, texture);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, width, height, 0, GL_RED, GL_FLOAT,
-               0);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, width, height, 0, GL_RED, GL_FLOAT, 0);
 
   glGenVertexArrays(1, &vao);
   glBindVertexArray(vao);
 
-  float vertices[] = {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, -1.0f, 1.0f, 0.0f,
-                      -1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 1.0f, 0.0f, 1.0f};
+  float quadVertices[] = {
+   -1.0f,  1.0f, 0.0f, 1.0f,
+   -1.0f, -1.0f, 0.0f, 0.0f,
+    1.0f,  1.0f, 1.0f, 1.0f,
+    1.0f, -1.0f, 1.0f, 0.0f,
+  };
   glGenBuffers(1, &vbo);
   glBindBuffer(GL_ARRAY_BUFFER, vbo);
-  glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-  unsigned int indices[] = {0, 1, 3, 1, 2, 3};
-  glGenBuffers(1, &ebo);
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-  glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices,
-               GL_STATIC_DRAW);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), quadVertices, GL_STATIC_DRAW);
 
   glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)0);
   glEnableVertexAttribArray(0);
-  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float),
-                        (void *)(2 * sizeof(float)));
+  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)(2 * sizeof(float)));
   glEnableVertexAttribArray(1);
 
   // set window parameters and callbacks
-  glfwSwapInterval(0);
+  glfwSwapInterval(1);
   glfwSetWindowUserPointer(windowPtr, this);
 
-  glViewport(0, 0, width, height);
   glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
   glfwSetScrollCallback(windowPtr, scrollCallback);
@@ -185,10 +157,27 @@ Window2D::Window2D(int width, int height) : width(width), height(height)
   shader = std::make_unique<Shader>("shaders/shader_2d.vs", "shaders/shader_2d.fs");
   shader->use();
   shader->setInt("texture1", 0);
+
+  // init Npp vars
+  CUDA_CHECK(cudaMalloc(&dUpdateRelativeError, sizeof(Npp64f)));
+  CUDA_CHECK(cudaMallocHost(&hUpdateRelativeError, sizeof(double)));
+
+  updateC();
+  float *tex1 = nullptr;
+  float *tex2 = nullptr;
+  CUDA_CHECK(cudaGraphicsMapResources(2, cudaPboResources, streams[0]));
+  CUDA_CHECK(cudaGraphicsResourceGetMappedPointer((void **)&tex1, nullptr, cudaPboResources[0]));
+  CUDA_CHECK(cudaGraphicsResourceGetMappedPointer((void **)&tex2, nullptr, cudaPboResources[1]));
+  computeJuliaCuda(width, height, c, zoomLevel, xOffset, yOffset, tex1, streams[0]);
+  computeJuliaCuda(width, height, c, zoomLevel, xOffset, yOffset, tex2, streams[0]);
+  CUDA_CHECK(cudaGraphicsUnmapResources(2, cudaPboResources, streams[0]));
+  CUDA_CHECK(cudaStreamSynchronize(streams[0]));
 }
 
 Window2D::~Window2D()
 {
   cudaFreeHost(hCudaBuffers[0]);
   cudaFreeHost(hCudaBuffers[1]);
+  cudaFree(dUpdateRelativeError);
+  cudaFreeHost(hUpdateRelativeError);
 }

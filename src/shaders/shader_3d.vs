@@ -7,6 +7,7 @@ uniform sampler2D heightMap;
 uniform float xstep; // TODO: make constant?
 uniform float ystep; // TODO: make constant?
 uniform mat4 lightSpaceMatrix;
+uniform vec2 texStretching;
 
 out vec3 vNorm;
 out vec3 fragPos;
@@ -15,7 +16,7 @@ out vec2 uv;
 
 void main()
 {
-    uv = aPos * 0.5 + 0.5;
+    uv = aPos * texStretching * 0.5 + 0.5;
     float h = texture(heightMap, uv).r;
 
     vec4 pos = vec4(aPos.x, h, aPos.y, 1.0);

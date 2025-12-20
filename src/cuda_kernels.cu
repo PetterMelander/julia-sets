@@ -16,7 +16,7 @@ __device__ __forceinline__ void operator+=(float2 &a, const float2 b)
 
 __device__ float evaluate(float2 z, const float2 c)
 {
-  constexpr int MAX_ITERS = 1000;
+  constexpr int MAX_ITERS = 2500;
   constexpr float R = 2.0f;
 
   float escapeIter = MAX_ITERS;
@@ -38,7 +38,8 @@ __device__ float evaluate(float2 z, const float2 c)
   float retval;
   if (escapeIter < MAX_ITERS)
   {
-    retval = escapeIter + 1.0f - __logf(__logf(__fsqrt_rn(escapeAbs2))) / logf(2.0f);
+    // 1 - log(log(abs(z)))/log(2) = 2 - log2(ln(abs(z²)))
+    retval = escapeIter + 2.0f - __log2f(__logf(escapeAbs2));
   }
   else
   {
@@ -47,16 +48,16 @@ __device__ float evaluate(float2 z, const float2 c)
   return retval;
 }
 
-__global__ void julia(float *const __restrict__ buffer, const float range, const float2 offsets,
-                      const float2 c, const int width, const int height)
+__global__ void julia(float *const __restrict__ buffer, const float2 planeTopLeft,
+                      const float2 pixelStep, const float2 c, const int width, const int height)
 {
   int xIdx = blockIdx.x * blockDim.x + threadIdx.x;
   int yIdx = blockIdx.y * blockDim.y + threadIdx.y;
 
   if (xIdx < width && yIdx < height)
   {
-    float re = ((float)xIdx / (width - 1)) * range * 2 - range - offsets.x;
-    float im = ((float)yIdx / (height - 1)) * range * 2 - range - offsets.y;
+    float re = planeTopLeft.x + (float)xIdx * pixelStep.x;
+    float im = planeTopLeft.y + (float)yIdx * pixelStep.y;
     float2 z{re, im};
 
     float intensity = evaluate(z, c);
@@ -68,13 +69,24 @@ void computeJuliaCuda(int width, int height, std::complex<double> c, double zoom
                       double xOffset, double yOffset, float *buffer, cudaStream_t stream)
 {
   float2 C = make_float2(c.real(), c.imag());
-  float2 offsets = make_float2(xOffset, yOffset);
 
-  unsigned int NumBlocks = (width + BLOCK_SIZE_JULIA - 1) / BLOCK_SIZE_JULIA;
+  int minDim = std::min(width, height);
+  float viewWidth = 2.0f * ((float)width / (minDim * zoomLevel));
+  float viewHeight = 2.0f * ((float)height / (minDim * zoomLevel));
+  
+  float2 pixelStep;
+  pixelStep.x = viewWidth / (width - 1);
+  pixelStep.y = viewHeight / (height - 1);
+
+  float2 planeTopLeft;
+  planeTopLeft.x = -(viewWidth / 2.0f) - (float)xOffset;
+  planeTopLeft.y = -(viewHeight / 2.0f) - (float)yOffset;
+
+  unsigned int gridHeight = (height + BLOCK_SIZE_JULIA - 1) / BLOCK_SIZE_JULIA;
+  unsigned int gridWidth = (width + BLOCK_SIZE_JULIA - 1) / BLOCK_SIZE_JULIA;
+  dim3 gridDims{gridWidth, gridHeight};
   dim3 blockDims{BLOCK_SIZE_JULIA, BLOCK_SIZE_JULIA};
-  dim3 gridDims{NumBlocks, NumBlocks};
-  julia<<<gridDims, blockDims, 0, stream>>>(buffer, (float)(1.0 / zoomLevel),
-                                            offsets, C, width, height);
+  julia<<<gridDims, blockDims, 0, stream>>>(buffer, planeTopLeft, pixelStep, C, width, height);
   CUDA_CHECK(cudaGetLastError());
 }
 
@@ -111,9 +123,6 @@ __global__ void compute_normals(const float *__restrict__ const h, float2 *__res
   To reduce memory bandwidth usage, the constant y coordinate is not written to global memory. It is
   instead left to the vertex shader to compute. Similarly, the constants ystep and xstep from the
   x and z coordinates are left to the vertex shader to compute.
-
-  The height values are transformed to produce more visually appealing shapes. This transform must
-  match the transform also applied in the vertex shader.
   */
   constexpr int HALO = 1;
   constexpr int TILE_H = BLOCK_H + 2 * HALO;
@@ -193,7 +202,8 @@ void computeNormalsCuda(int width, int height, float *const h, float *out, cudaS
   CUDA_CHECK(cudaGetLastError());
 }
 
-__global__ void scaleImage(const int dsize, const float *__restrict__ const imgMin, const float *__restrict__ const imgMax, float *__restrict__ h)
+__global__ void scaleImage(const int dsize, const float *__restrict__ const imgMin,
+                           const float *__restrict__ const imgMax, float *__restrict__ h)
 {
   int idx = blockDim.x * blockIdx.x + threadIdx.x;
   __shared__ float scale;
@@ -202,12 +212,14 @@ __global__ void scaleImage(const int dsize, const float *__restrict__ const imgM
   {
     min = __ldg(imgMin);
     float max = __ldg(imgMax);
-    scale = 0.25f / (max - min);
+    scale = 1.0f / (max - min);
+    // scale = 5.0f / (max - min);
   }
   __syncthreads();
   if (idx < dsize)
   {
-    h[idx] = (h[idx] - min) * scale;
+    h[idx] = (h[idx] - min) * scale * 0.25f;
+    // h[idx] = expf(-(h[idx] - min) * scale) * 0.25f;
   }
 }
 
@@ -218,4 +230,20 @@ void rescaleImage(int width, int height, float *imgMin, float *imgMax, float *h,
   int num_blocks = (dsize + block_size - 1) / block_size;
   scaleImage<<<num_blocks, block_size, 0, stream>>>(dsize, imgMin, imgMax, h);
   CUDA_CHECK(cudaGetLastError());
+}
+
+__global__ void updateScale(float *__restrict__ const oldMin, float *__restrict__ const newMin, float *__restrict__ const oldMax, float *__restrict__ const newMax)
+{
+  if (threadIdx.x == 0)
+  {
+    *newMin = 0.99f * *oldMin + 0.01f * *newMin;
+    *newMax = 0.99f * *oldMax + 0.01f * *newMax;
+    *oldMin = *newMin;
+    *oldMax = *newMax;
+  }
+}
+
+void updateScale(float *oldMin, float *newMin, float *oldMax, float *newMax, cudaStream_t stream)
+{
+  updateScale<<<1, 1, 0, stream>>>(oldMin, newMin, oldMax, newMax);
 }
