@@ -90,7 +90,6 @@ public:
   int getNextBufferIndex() { return (activeBuffer + 1) % 2; }
 
   void swap() {
-    glfwMakeContextCurrent(windowPtr);
     glfwSwapBuffers(windowPtr);
   }
 
