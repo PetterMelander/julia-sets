@@ -60,3 +60,4 @@ void computeJuliaCuda(int width, int height, std::complex<double> c, double zoom
                       double xOffset, double yOffset, float *buffer, cudaStream_t stream);
 void computeNormalsCuda(int width, int height, float *h, float *out, cudaStream_t stream);
 void rescaleImage(int width, int height, float *imgMin, float *imgMax, float *h, cudaStream_t stream);
+void updateScale(float *oldMin, float *newMin, float *oldMax, float *newMax, cudaStream_t stream);

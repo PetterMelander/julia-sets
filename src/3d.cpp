@@ -113,8 +113,25 @@ void computeJulia(Window2D &window2D, Window3D &window3D,
 
 int main()
 {
-  int width = 1920;
-  int height = 2160;
+  // init gl and window
+  glfwInit();
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
+  glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+  glfwWindowHint(GLFW_SAMPLES, 16);
+  #ifndef NDEBUG
+  glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, true);
+  #endif
+  
+  GLFWmonitor *primaryMonitor = glfwGetPrimaryMonitor();
+  const GLFWvidmode *mode = glfwGetVideoMode(primaryMonitor);
+  glfwWindowHint(GLFW_RED_BITS, mode->redBits);
+  glfwWindowHint(GLFW_GREEN_BITS, mode->greenBits);
+  glfwWindowHint(GLFW_BLUE_BITS, mode->blueBits);
+  glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
+
+  int width = mode->width / 2;
+  int height = mode->height;
 
   // width must be multiple of 8 for avx kernel to work
   width = (width + 7) / 8 * 8;
@@ -145,22 +162,6 @@ int main()
   cudaStreamDestroy(stream);
   CUDA_CHECK(cudaMalloc(&nppBuffer, std::max(minMaxBufferSize, errorBufferSize)));
 
-  // init gl and window
-  glfwInit();
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
-  glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-  glfwWindowHint(GLFW_SAMPLES, 4);
-#ifndef NDEBUG
-  glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, true);
-#endif
-
-  GLFWmonitor *primaryMonitor = glfwGetPrimaryMonitor();
-  const GLFWvidmode *mode = glfwGetVideoMode(primaryMonitor);
-  glfwWindowHint(GLFW_RED_BITS, mode->redBits);
-  glfwWindowHint(GLFW_GREEN_BITS, mode->greenBits);
-  glfwWindowHint(GLFW_BLUE_BITS, mode->blueBits);
-  glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
 
   GLFWwindow *windowPtr;
   windowPtr = glfwCreateWindow(width * 2, height, "Julia", primaryMonitor, NULL);
@@ -183,6 +184,7 @@ int main()
   auto start = clock.now();
   while (!glfwWindowShouldClose(window2D.windowPtr))
   {
+    ++frameCount;
     window2D.updateState();
     window3D.updateState();
 
@@ -229,12 +231,13 @@ int main()
 
     glfwPollEvents();
 
-    if (++frameCount == 6283)
+    if (window2D.theta >= 2.0 * glm::pi<double>())
     {
       auto end = clock.now();
       std::chrono::duration<double> diff = end - start;
-      std::cout << "fps: " << 6283 / diff.count() << std::endl;
+      std::cout << "fps: " << frameCount / diff.count() << std::endl;
       frameCount = 0;
+      // window2D.theta = 0.0;
       start = clock.now();
     }
   }

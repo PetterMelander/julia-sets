@@ -202,7 +202,8 @@ void computeNormalsCuda(int width, int height, float *const h, float *out, cudaS
   CUDA_CHECK(cudaGetLastError());
 }
 
-__global__ void scaleImage(const int dsize, const float *__restrict__ const imgMin, const float *__restrict__ const imgMax, float *__restrict__ h)
+__global__ void scaleImage(const int dsize, const float *__restrict__ const imgMin,
+                           const float *__restrict__ const imgMax, float *__restrict__ h)
 {
   int idx = blockDim.x * blockIdx.x + threadIdx.x;
   __shared__ float scale;
@@ -211,14 +212,14 @@ __global__ void scaleImage(const int dsize, const float *__restrict__ const imgM
   {
     min = __ldg(imgMin);
     float max = __ldg(imgMax);
-    // scale = 1.0f / (max - min);
-    scale = 10.0f / (max - min);
+    scale = 1.0f / (max - min);
+    // scale = 5.0f / (max - min);
   }
   __syncthreads();
   if (idx < dsize)
   {
-    // h[idx] = (h[idx] - min) * scale * 0.25f;
-    h[idx] = expf(-(h[idx] - min) * scale) * 0.25f;
+    h[idx] = (h[idx] - min) * scale * 0.25f;
+    // h[idx] = expf(-(h[idx] - min) * scale) * 0.25f;
   }
 }
 
@@ -229,4 +230,20 @@ void rescaleImage(int width, int height, float *imgMin, float *imgMax, float *h,
   int num_blocks = (dsize + block_size - 1) / block_size;
   scaleImage<<<num_blocks, block_size, 0, stream>>>(dsize, imgMin, imgMax, h);
   CUDA_CHECK(cudaGetLastError());
+}
+
+__global__ void updateScale(float *__restrict__ const oldMin, float *__restrict__ const newMin, float *__restrict__ const oldMax, float *__restrict__ const newMax)
+{
+  if (threadIdx.x == 0)
+  {
+    *newMin = 0.99f * *oldMin + 0.01f * *newMin;
+    *newMax = 0.99f * *oldMax + 0.01f * *newMax;
+    *oldMin = *newMin;
+    *oldMax = *newMax;
+  }
+}
+
+void updateScale(float *oldMin, float *newMin, float *oldMax, float *newMax, cudaStream_t stream)
+{
+  updateScale<<<1, 1, 0, stream>>>(oldMin, newMin, oldMax, newMax);
 }

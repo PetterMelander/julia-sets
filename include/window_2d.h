@@ -110,12 +110,12 @@ private:
 
   void updateC()
   {
-    // c.real(sin(sqrt(2.0) * theta));
-    // c.imag(sin(theta));
+    c.real(sin(sqrt(2.0) * theta));
+    c.imag(sin(theta));
     // c.real((R - r) * cos(theta) + d * cos((R - r) * theta / r));
     // c.imag((R - r) * sin(theta) - d * sin((R - r) * theta / r));
-    c.real(length * cos(theta));
-    c.imag(length * sin(theta));
+    // c.real(length * cos(theta));
+    // c.imag(length * sin(theta));
   }
 
   void updatePan()

@@ -80,8 +80,24 @@ void computeJulia(Window2D &window, Npp8u *nppBuffer)
 
 int main()
 {
-  int width = 2048;
-  int height = 2048;
+  // init gl and window
+  glfwInit();
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
+  glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+#ifndef NDEBUG
+  glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, true);
+#endif
+
+  GLFWmonitor *primaryMonitor = glfwGetPrimaryMonitor();
+  const GLFWvidmode *mode = glfwGetVideoMode(primaryMonitor);
+  glfwWindowHint(GLFW_RED_BITS, mode->redBits);
+  glfwWindowHint(GLFW_GREEN_BITS, mode->greenBits);
+  glfwWindowHint(GLFW_BLUE_BITS, mode->blueBits);
+  glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
+
+  int width = mode->width;
+  int height = mode->height;
 
   // width must be multiple of 8 for avx kernel to work
   width = (width + 7) / 8 * 8;
@@ -106,17 +122,9 @@ int main()
   cudaStreamDestroy(stream);
   CUDA_CHECK(cudaMalloc(&nppBuffer, nppBufferSize));
 
-  // init gl and window
-  glfwInit();
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
-  glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-#ifndef NDEBUG
-  glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, true);
-#endif
 
   GLFWwindow *windowPtr;
-  windowPtr = glfwCreateWindow(width, height, "Julia", NULL, NULL);
+  windowPtr = glfwCreateWindow(width, height, "Julia", primaryMonitor, NULL);
   if (windowPtr == NULL)
   {
     std::cout << "Failed to create window" << std::endl;

@@ -11,7 +11,7 @@ uniform sampler2D heightMap;
 uniform sampler2D shadowMap;
 uniform vec2 aoSamples[16];
 
-const vec3 lightColor = vec3(0.7, 0.7, 0.7);
+const vec3 lightColor = vec3(0.5, 0.5, 0.5);
 const vec3 lightDir = vec3(0.4472135955, 0.894427191, 0.0);
 const vec3 ambient = vec3(0.2, 0.2, 0.2);
 const float specularStrength = 0.5;
@@ -66,8 +66,12 @@ float occlusionCalculation(vec2 uv, float fragHeight, vec3 norm)
 
 void main()
 {
-    float height = log(4.0 * fragPos.y) * -1.0 * 0.1 * 0.25;
-    vec3 color = vec3(0.5 + height * 0.5, 0.25 - height * 0.9, 1.0 - height * 4.0);
+    // float height = log(4.0 * fragPos.y) * 0.2 * 0.5 * -1.0 - 0.25;
+    // float height = fragPos.y;
+    // float height = 1.0 / (1.0 + exp(-fragPos.y * 20.0 + 2.5)) * 0.25;
+    float height = (fragPos.y * 4.0 * 1.0 - 0.5) * 2.0 / 3.0;
+    height = height / (1.0 + abs(height));
+    vec3 color = vec3((0.25 + height) * 1.0, (0.25 - height) * 0.5, (0.25 - height) * 2.0);
     vec3 norm = normalize(vNorm);
 
     float occlusion = occlusionCalculation(uv, fragPos.y, norm);
@@ -77,7 +81,7 @@ void main()
 
     vec3 viewDir = normalize(viewPos - fragPos);
     vec3 halfwayDir = normalize(lightDir + viewDir);
-    float spec = pow(max(dot(norm, halfwayDir), 0.0), 64);
+    float spec = pow(max(dot(norm, halfwayDir), 0.0), 128);
     vec3 specular = specularStrength * spec * lightColor;
 
     float shadow = shadowCalculation(fragPosLightSpace, norm);

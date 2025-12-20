@@ -21,31 +21,32 @@ Window3D::Window3D(int width, int height, GLFWwindow *windowPtr)
 
   // allocate buffers, texture, etc.
   std::vector<float> vertices;
-  vertices.reserve(2 * width * height);
+  vertices.resize(4 * width * height);
   std::vector<unsigned int> indices;
-  indices.reserve(3 * 2 * (width - 1) * (height - 1));
+  indices.resize(6 * (width - 1) * (height - 1));
   int minDim = std::min(width, height);
   double xStep = 2.0 * ((double)width / minDim) / (double)(width - 1);
   double yStep = 2.0 * ((double)height / minDim) / (double)(height - 1);
+  #pragma omp parallel for
   for (int y = 0; y < height; ++y)
   {
     for (int x = 0; x < width; ++x)
     {
-      vertices.push_back(x * xStep - 1.0 * width / minDim);
-      vertices.push_back(y * yStep - 1.0 * height / minDim);
-      vertices.push_back(0.0f);
-      vertices.push_back(0.0f);
+      vertices[(y * width + x) * 4 + 0] = x * xStep - 1.0 * width / minDim;
+      vertices[(y * width + x) * 4 + 1] = y * yStep - 1.0 * height / minDim;
+      vertices[(y * width + x) * 4 + 2] = 0.0f;
+      vertices[(y * width + x) * 4 + 3] = 0.0f;
 
       if (x < width - 1 && y < height - 1)
       {
         unsigned int i = y * width + x;
-        indices.push_back(i);
-        indices.push_back(i + width + 1);
-        indices.push_back(i + 1);
+        indices[(y * (width - 1) + x) * 6 + 0] = i;
+        indices[(y * (width - 1) + x) * 6 + 1] = i + width + 1;
+        indices[(y * (width - 1) + x) * 6 + 2] = i + 1;
 
-        indices.push_back(i);
-        indices.push_back(i + width);
-        indices.push_back(i + width + 1);
+        indices[(y * (width - 1) + x) * 6 + 3] = i;
+        indices[(y * (width - 1) + x) * 6 + 4] = i + width;
+        indices[(y * (width - 1) + x) * 6 + 5] = i + width + 1;
       }
     }
   }
@@ -106,10 +107,11 @@ Window3D::Window3D(int width, int height, GLFWwindow *windowPtr)
   glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, width, height, 0, GL_RED, GL_FLOAT, 0);
 
   // set up resources for shadows
+  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
   glGenFramebuffers(1, &depthMapFBO);
   glGenTextures(1, &depthMap);
   glBindTexture(GL_TEXTURE_2D, depthMap);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, SHADOW_WIDTH, SHADOW_HEIGHT, 0,
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT16, SHADOW_WIDTH, SHADOW_HEIGHT, 0,
                GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);

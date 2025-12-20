@@ -161,6 +161,17 @@ Window2D::Window2D(int width, int height, GLFWwindow *windowPtr)
   // init Npp vars
   CUDA_CHECK(cudaMalloc(&dUpdateRelativeError, sizeof(Npp64f)));
   CUDA_CHECK(cudaMallocHost(&hUpdateRelativeError, sizeof(double)));
+
+  updateC();
+  float *tex1 = nullptr;
+  float *tex2 = nullptr;
+  CUDA_CHECK(cudaGraphicsMapResources(2, cudaPboResources, streams[0]));
+  CUDA_CHECK(cudaGraphicsResourceGetMappedPointer((void **)&tex1, nullptr, cudaPboResources[0]));
+  CUDA_CHECK(cudaGraphicsResourceGetMappedPointer((void **)&tex2, nullptr, cudaPboResources[1]));
+  computeJuliaCuda(width, height, c, zoomLevel, xOffset, yOffset, tex1, streams[0]);
+  computeJuliaCuda(width, height, c, zoomLevel, xOffset, yOffset, tex2, streams[0]);
+  CUDA_CHECK(cudaGraphicsUnmapResources(2, cudaPboResources, streams[0]));
+  CUDA_CHECK(cudaStreamSynchronize(streams[0]));
 }
 
 Window2D::~Window2D()
