@@ -172,6 +172,9 @@ Window2D::Window2D(int width, int height, GLFWwindow *windowPtr)
   computeJuliaCuda(width, height, c, zoomLevel, xOffset, yOffset, tex2, streams[0]);
   CUDA_CHECK(cudaGraphicsUnmapResources(2, cudaPboResources, streams[0]));
   CUDA_CHECK(cudaStreamSynchronize(streams[0]));
+
+  hLabelImage = new float[labelSize * labelSize];
+  CUDA_CHECK(cudaMalloc(&dLabelImage, labelSize * labelSize * sizeof(float)));
 }
 
 Window2D::~Window2D()
@@ -180,4 +183,7 @@ Window2D::~Window2D()
   cudaFreeHost(hCudaBuffers[1]);
   cudaFree(dUpdateRelativeError);
   cudaFreeHost(hUpdateRelativeError);
+
+  cudaFree(dLabelImage);
+  delete[] hLabelImage;
 }

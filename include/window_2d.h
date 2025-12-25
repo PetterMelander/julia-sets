@@ -46,6 +46,11 @@ public:
   bool needsTextureSwitch = false;
   bool paused = false;
 
+  int labelSize = 224;
+  float *dLabelImage;
+  float *hLabelImage;
+
+
   Window2D(int width, int height, GLFWwindow *windowPtr);
 
   ~Window2D();

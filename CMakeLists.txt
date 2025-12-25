@@ -38,16 +38,18 @@ find_package(glfw3 CONFIG REQUIRED)
 find_package(CUDAToolkit REQUIRED)
 
 add_library(julia_lib
+    # src/xgb.c
     vendor/glad/src/glad.c
     src/avx_kernels.cpp
     src/cuda_kernels.cu
     src/window_2d.cpp
     src/window_3d.cpp
+    src/labeling.cpp
 )
 
 target_include_directories(julia_lib PUBLIC
-    vendor/glad/include
     include
+    vendor/glad/include
     ${CUDAToolkit_INCLUDE_DIRS}
 )
 
@@ -56,7 +58,9 @@ set_property(TARGET julia_lib PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 
 target_link_libraries(julia_lib PUBLIC
     glfw
-    OpenGL::GL 
+    OpenGL::GL
+    nvinfer
+    nvonnxparser
     CUDA::cudart_static
     ${NPP_LIBS}
     glm
