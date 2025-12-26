@@ -22,7 +22,6 @@ extern "C"
 #endif
 
 NppStreamContext ctx;
-CNNModel cnn("medium.trt", "medium.onnx");
 
 void computeJulia(Window2D &window, Npp8u *nppBuffer)
 {

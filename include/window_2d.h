@@ -59,35 +59,9 @@ public:
 
   ~Window2D();
 
-  inline void updateState()
-  {
-    CUDA_CHECK(cudaStreamSynchronize(streams[(activeBuffer + 1) % 2]));
-    updateTheta();
-    updatePan();
+  void updateState();
 
-    if (needsRedraw)
-    {
-      updateC();
-    }
-  }
-
-  inline void redraw(bool switchTex = true)
-  {
-    if (switchTex)
-    {
-      switchTexture(activeBuffer);
-    }
-    redrawImage();
-    if (needsRedraw)
-    {
-      needsRedraw = false;
-      needsTextureSwitch = true;
-    }
-    else if (needsTextureSwitch)
-    {
-      needsTextureSwitch = false;
-    }
-  }
+  void redraw(bool switchTex = true);
 
   inline void switchBuffer() { activeBuffer = (activeBuffer + 1) % 2; }
 
@@ -97,50 +71,7 @@ public:
 
   inline void swap(){ glfwSwapBuffers(windowPtr); }
 
-  void updatePrecision()
-  {
-    float minDim = std::min(width, height);
-    float newZoom = zoomLevel * powf(1.1f, 5.0f) * minDim / cnn.imgSize;
-
-    if (newZoom < 300.0f)
-    {
-      singlePrecision = true;
-      return;
-    }
-    else if (newZoom > 100000.0f)
-    {
-      singlePrecision = false;
-      return;
-    }
-
-    float result = 0;
-
-    // enqueue cnn pred
-    cnn.enqueue(c, newZoom, xOffset, yOffset);
-
-    // xgb pred
-    std::vector<Entry> entries(5);
-    entries[0].fvalue = ((float)c.real() - INPUT_MEANS[0]) / INPUT_STDS[0];
-    entries[1].fvalue = ((float)c.imag() - INPUT_MEANS[1]) / INPUT_STDS[1];
-    entries[2].fvalue = ((float)xOffset - INPUT_MEANS[2]) / INPUT_STDS[2];
-    entries[3].fvalue = ((float)yOffset - INPUT_MEANS[3]) / INPUT_STDS[3];
-    entries[4].fvalue = ((float)log(newZoom + 1.0) - INPUT_MEANS[4]) / INPUT_STDS[4];
-    predict(entries.data(), 0, &result);
-
-    // mlp pred
-    float windowParams[] = {entries[0].fvalue, entries[1].fvalue,
-                            entries[2].fvalue, entries[3].fvalue,
-                            entries[4].fvalue};
-    result += 1.0f / (1.0f + expf(-mlpPredict(windowParams)));
-
-    // get cnn pred
-    result += 2.0f * 1.0f / (1.0f + expf(-cnn.getPred()));
-
-    // weight ensemble 1 - 1 - 2
-    result /= 4.0f;
-
-    singlePrecision = result >= 0.5f;
-  }
+  void updatePrecision();
 
   inline bool spSufficient() { return singlePrecision; }
 
@@ -162,7 +93,7 @@ private:
 
   CNNModel cnn = CNNModel("cnn.trt", "cnn.onnx");
 
-  void updateC()
+  inline void updateC()
   {
     c.real(sin(sqrt(2.0) * theta));
     c.imag(sin(theta));
@@ -172,61 +103,11 @@ private:
     // c.imag(length * sin(theta));
   }
 
-  void updatePan()
-  {
-    if (trackingMouse) // TODO: incorporate into mouse callback?
-    {
-      double xPos, yPos;
-      glfwGetCursorPos(windowPtr, &xPos, &yPos);
-      xOffset -= (lastMouseX - xPos) / std::min(width, height) / zoomLevel * 2;
-      yOffset += (lastMouseY - yPos) / std::min(width, height) / zoomLevel * 2;
+  void updatePan();
 
-      lastMouseX = xPos;
-      lastMouseY = yPos;
-      needsRedraw = true;
-    }
-  }
+  void updateTheta();
 
-  void updateTheta()
-  {
-    if (!paused)
-    {
-      double thetaUpdate = 0.8 * lastThetaUpdate + std::min(0.001, exp(-*hUpdateRelativeError * 10000)) + 0.00001;
-      theta += std::min(lastThetaUpdate * 2.0, thetaUpdate);
-      lastThetaUpdate = thetaUpdate;
-      needsRedraw = true;
-    }
-    else if (glfwGetKey(windowPtr, GLFW_KEY_LEFT) == GLFW_PRESS)
-    {
-      theta -= 0.001 / zoomLevel;
-      needsRedraw = true;
-    }
-    else if (glfwGetKey(windowPtr, GLFW_KEY_RIGHT) == GLFW_PRESS)
-    {
-      theta += 0.001 / zoomLevel;
-      needsRedraw = true;
-    }
-  }
+  void switchTexture(int index);
 
-  void switchTexture(int index)
-  {
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, texture);
-    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pboIds[index]);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RED, GL_FLOAT, 0);
-  }
-
-  void redrawImage()
-  {
-    glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
-
-    glViewport(0, 0, width, height);
-    shader->use();
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, texture);
-
-    glBindVertexArray(vao);
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-  }
+  void redrawImage();
 };

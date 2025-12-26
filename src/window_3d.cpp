@@ -51,7 +51,7 @@ Window3D::Window3D(int width, int height, GLFWwindow *windowPtr)
     }
   }
 
-  constexpr size_t aoNumSamples = 16;
+  constexpr size_t aoNumSamples = 32;
   std::uniform_real_distribution<float> randomAngles(0.0, 2 * glm::pi<float>());
   std::uniform_real_distribution<float> randomRadii(0.0, 1.0);
   std::default_random_engine generator;
@@ -156,5 +156,77 @@ Window3D::Window3D(int width, int height, GLFWwindow *windowPtr)
   for (unsigned int i = 0; i < aoNumSamples; ++i)
   {
     shader->setVec2("aoSamples[" + std::to_string(i) + "]", aoKernel[i]);
+  }
+}
+
+void Window3D::switchTexture(int index)
+{
+  glActiveTexture(GL_TEXTURE1);
+  glBindTexture(GL_TEXTURE_2D, heightMap);
+  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pboIds[index]);
+  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RED, GL_FLOAT, 0);
+}
+
+void Window3D::redrawImage(int index, bool depthPass)
+{
+
+  if (depthPass)
+  {
+    depthShader->use();
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, heightMap);
+
+    glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
+    glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
+    glClear(GL_DEPTH_BUFFER_BIT);
+    glBindVertexArray(vaoIds[index]);
+    glDrawElements(GL_TRIANGLES, 3 * 2 * (height - 1) * (width - 1), GL_UNSIGNED_INT, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  }
+
+  // main pass
+  glViewport(width, 0, width, height);
+  glEnable(GL_MULTISAMPLE);
+
+  shader->use();
+
+  glActiveTexture(GL_TEXTURE1);
+  glBindTexture(GL_TEXTURE_2D, heightMap);
+  glActiveTexture(GL_TEXTURE2);
+  glBindTexture(GL_TEXTURE_2D, depthMap);
+
+  glBindVertexArray(vaoIds[index]);
+  glDrawElements(GL_TRIANGLES, 3 * 2 * (height - 1) * (width - 1), GL_UNSIGNED_INT, 0);
+
+  glDisable(GL_MULTISAMPLE);
+
+  needsRedraw = false;
+}
+
+void Window3D::processMovement(float deltaTime)
+{
+  if (glfwGetKey(windowPtr, GLFW_KEY_W) == GLFW_PRESS)
+  {
+    camera.ProcessKeyboard(FORWARD, deltaTime);
+    shader->setVec3("viewPos", camera.front);
+    needsRedraw = true;
+  }
+  if (glfwGetKey(windowPtr, GLFW_KEY_S) == GLFW_PRESS)
+  {
+    camera.ProcessKeyboard(BACKWARD, deltaTime);
+    shader->setVec3("viewPos", camera.front);
+    needsRedraw = true;
+  }
+  if (glfwGetKey(windowPtr, GLFW_KEY_A) == GLFW_PRESS)
+  {
+    camera.ProcessKeyboard(LEFT, deltaTime);
+    shader->setVec3("viewPos", camera.front);
+    needsRedraw = true;
+  }
+  if (glfwGetKey(windowPtr, GLFW_KEY_D) == GLFW_PRESS)
+  {
+    camera.ProcessKeyboard(RIGHT, deltaTime);
+    shader->setVec3("viewPos", camera.front);
+    needsRedraw = true;
   }
 }

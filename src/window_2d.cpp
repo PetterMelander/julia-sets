@@ -86,7 +86,7 @@ void APIENTRY glDebugOutput(GLenum source, GLenum type, unsigned int id,
 #endif
 
 Window2D::Window2D(int width, int height, GLFWwindow *windowPtr)
-: windowPtr(windowPtr), width(width), height(height)
+    : windowPtr(windowPtr), width(width), height(height)
 {
 
 #ifndef NDEBUG
@@ -128,9 +128,9 @@ Window2D::Window2D(int width, int height, GLFWwindow *windowPtr)
   glBindVertexArray(vao);
 
   float quadVertices[] = {
-   -1.0f,  1.0f, 0.0f, 1.0f,
-   -1.0f, -1.0f, 0.0f, 0.0f,
-    1.0f,  1.0f, 1.0f, 1.0f,
+    -1.0f, 1.0f, 0.0f, 1.0f,
+    -1.0f, -1.0f, 0.0f, 0.0f,
+    1.0f, 1.0f, 1.0f, 1.0f,
     1.0f, -1.0f, 1.0f, 0.0f,
   };
   glGenBuffers(1, &vbo);
@@ -189,4 +189,137 @@ Window2D::~Window2D()
 
   CUDA_CHECK(cudaFree(dLabelImage));
   delete[] hLabelImage;
+}
+
+void Window2D::updateState()
+{
+  CUDA_CHECK(cudaStreamSynchronize(streams[(activeBuffer + 1) % 2]));
+  updateTheta();
+  updatePan();
+
+  if (needsRedraw)
+  {
+    updateC();
+  }
+}
+
+void Window2D::redraw(bool switchTex)
+{
+  if (switchTex)
+  {
+    switchTexture(activeBuffer);
+  }
+  redrawImage();
+  if (needsRedraw)
+  {
+    needsRedraw = false;
+    needsTextureSwitch = true;
+  }
+  else if (needsTextureSwitch)
+  {
+    needsTextureSwitch = false;
+  }
+}
+
+void Window2D::updatePrecision()
+{
+  float minDim = std::min(width, height);
+  float newZoom = zoomLevel * powf(1.1f, 5.0f) * minDim / cnn.imgSize;
+
+  if (newZoom < 300.0f)
+  {
+    singlePrecision = true;
+    return;
+  }
+  else if (newZoom > 100000.0f)
+  {
+    singlePrecision = false;
+    return;
+  }
+
+  float result = 0;
+
+  // enqueue cnn pred
+  cnn.enqueue(c, newZoom, xOffset, yOffset);
+
+  // xgb pred
+  std::vector<Entry> entries(5);
+  entries[0].fvalue = ((float)c.real() - INPUT_MEANS[0]) / INPUT_STDS[0];
+  entries[1].fvalue = ((float)c.imag() - INPUT_MEANS[1]) / INPUT_STDS[1];
+  entries[2].fvalue = ((float)xOffset - INPUT_MEANS[2]) / INPUT_STDS[2];
+  entries[3].fvalue = ((float)yOffset - INPUT_MEANS[3]) / INPUT_STDS[3];
+  entries[4].fvalue = ((float)log(newZoom + 1.0) - INPUT_MEANS[4]) / INPUT_STDS[4];
+  predict(entries.data(), 0, &result);
+
+  // mlp pred
+  float windowParams[] = {entries[0].fvalue, entries[1].fvalue,
+                          entries[2].fvalue, entries[3].fvalue,
+                          entries[4].fvalue};
+  result += 1.0f / (1.0f + expf(-mlpPredict(windowParams)));
+
+  // get cnn pred
+  result += 2.0f * 1.0f / (1.0f + expf(-cnn.getPred()));
+
+  // weight ensemble 1 - 1 - 2
+  result /= 4.0f;
+
+  singlePrecision = result >= 0.5f;
+}
+
+void Window2D::updatePan()
+{
+  if (trackingMouse) // TODO: incorporate into mouse callback?
+  {
+    double xPos, yPos;
+    glfwGetCursorPos(windowPtr, &xPos, &yPos);
+    xOffset -= (lastMouseX - xPos) / std::min(width, height) / zoomLevel * 2;
+    yOffset += (lastMouseY - yPos) / std::min(width, height) / zoomLevel * 2;
+
+    lastMouseX = xPos;
+    lastMouseY = yPos;
+    needsRedraw = true;
+  }
+}
+
+void Window2D::updateTheta()
+{
+  if (!paused)
+  {
+    double thetaUpdate = 0.8 * lastThetaUpdate + std::min(0.001, exp(-*hUpdateRelativeError * 10000)) + 0.00001;
+    theta += std::min(lastThetaUpdate * 2.0, thetaUpdate);
+    lastThetaUpdate = thetaUpdate;
+    needsRedraw = true;
+  }
+  else if (glfwGetKey(windowPtr, GLFW_KEY_LEFT) == GLFW_PRESS)
+  {
+    theta -= 0.001 / zoomLevel;
+    needsRedraw = true;
+  }
+  else if (glfwGetKey(windowPtr, GLFW_KEY_RIGHT) == GLFW_PRESS)
+  {
+    theta += 0.001 / zoomLevel;
+    needsRedraw = true;
+  }
+}
+
+void Window2D::switchTexture(int index)
+{
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, texture);
+  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pboIds[index]);
+  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RED, GL_FLOAT, 0);
+}
+
+void Window2D::redrawImage()
+{
+  glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
+
+  glViewport(0, 0, width, height);
+  shader->use();
+
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, texture);
+
+  glBindVertexArray(vao);
+  glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }

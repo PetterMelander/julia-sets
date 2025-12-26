@@ -47,6 +47,7 @@ add_library(julia_lib
     src/window_2d.cpp
     src/window_3d.cpp
     src/labeling.cpp
+    src/cnn.cpp
 )
 
 target_include_directories(julia_lib PUBLIC

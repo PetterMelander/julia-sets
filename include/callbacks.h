@@ -6,12 +6,12 @@
 #include "labeling.h"
 #include "window_2d.h"
 
-inline void framebufferSizeCallback(GLFWwindow *window, int width, int height)
+inline void framebufferSizeCallback(GLFWwindow *window, int width, int height) // TODO: fix or remove
 {
   glViewport(0, 0, width, height);
 }
 
-inline void mouseCallback(GLFWwindow *window, double xposIn, double yposIn)
+inline void mouseCallback(GLFWwindow *window, double xposIn, double yposIn) // TODO: unused
 {
   Window2D *window2d = static_cast<Window2D *>(glfwGetWindowUserPointer(window));
 
