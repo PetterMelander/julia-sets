@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "emlearn>=0.23.1",
+    "ipykernel>=7.1.0",
     "lightning>=2.6.0",
     "m2cgen>=0.10.0",
     "mlflow>=3.7.0",

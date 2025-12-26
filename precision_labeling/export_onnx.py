@@ -103,4 +103,4 @@ program = torch.onnx.export(
     input_names=["input"],
     output_names=["output"],
 )
-program.save("medium.onnx")
+program.save("cnn.onnx")

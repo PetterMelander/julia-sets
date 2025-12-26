@@ -7,10 +7,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if(MSVC)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W4 /openmp /fp:fast")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /W4 /openmp /fp:fast")
     add_compile_definitions(NOMINMAX) 
     add_compile_definitions(GLFW_INCLUDE_NONE) 
 else()
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -march=native -fopenmp -ffast-math -funroll-loops -fno-math-errno")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -march=native -fopenmp -ffast-math -funroll-loops -fno-math-errno")
 endif()
 
 if(WIN32)
@@ -38,8 +40,8 @@ find_package(glfw3 CONFIG REQUIRED)
 find_package(CUDAToolkit REQUIRED)
 
 add_library(julia_lib
-    # src/xgb.c
     vendor/glad/src/glad.c
+    src/xgb.c
     src/avx_kernels.cpp
     src/cuda_kernels.cu
     src/window_2d.cpp
@@ -76,6 +78,12 @@ add_custom_command(TARGET 3d POST_BUILD
         $<TARGET_FILE_DIR:3d>/shaders
     COMMENT "Copying shaders to binary directory..."
 )
+add_custom_command(TARGET 3d POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${CMAKE_CURRENT_SOURCE_DIR}/precision_labeling/cnn.onnx
+        $<TARGET_FILE_DIR:3d>/cnn.onnx
+    COMMENT "Copying onnx model to binary directory..."
+)
 
 if(WIN32)
     add_custom_command(TARGET 3d POST_BUILD
@@ -96,6 +104,12 @@ add_custom_command(TARGET 2d POST_BUILD
         ${CMAKE_CURRENT_SOURCE_DIR}/src/shaders
         $<TARGET_FILE_DIR:2d>/shaders
     COMMENT "Copying shaders to binary directory..."
+)
+add_custom_command(TARGET 2d POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${CMAKE_CURRENT_SOURCE_DIR}/precision_labeling/cnn.onnx
+        $<TARGET_FILE_DIR:2d>/cnn.onnx
+    COMMENT "Copying onnx model to binary directory..."
 )
 
 if(WIN32)

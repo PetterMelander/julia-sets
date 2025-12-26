@@ -5,8 +5,13 @@
 
 #include "mlp_constants.h"
 
-void mlpLayer(const float *inBuf, float *outBuf, const float *wBuf,
-              const float *bBuf, const int numInputs, const int numOutputs)
+inline void mlpLayer(
+    const float *__restrict__ inBuf,
+    float *__restrict__ outBuf,
+    const float *__restrict__ wBuf,
+    const float *__restrict__ bBuf,
+    const int numInputs,
+    const int numOutputs)
 {
     // loop over input nodes, vectorize associated weights, and accumulate to output nodes
     for (int i = 0; i < numInputs; ++i)
@@ -33,7 +38,11 @@ void mlpLayer(const float *inBuf, float *outBuf, const float *wBuf,
     }
 }
 
-float outputLayer(const float *inBuf, const float *wBuf, const float b, const int numInputs)
+inline float outputLayer(
+    const float *__restrict__ inBuf,
+    const float *__restrict__ wBuf,
+    const float b,
+    const int numInputs)
 {
     float accum = 0.0f;
     for (int i = 0; i < numInputs; i += 16)
@@ -46,21 +55,11 @@ float outputLayer(const float *inBuf, const float *wBuf, const float b, const in
     return accum + b;
 }
 
-float mlpPredict(const double *inputs)
+inline float mlpPredict(const float *scaledInputs)
 {
-    // scale inputs
-    float scaled_inputs[] = {
-        (float)(inputs[0] - INPUT_MEANS[0]) / INPUT_STDS[0],
-        (float)(inputs[1] - INPUT_MEANS[1]) / INPUT_STDS[1],
-        (float)(inputs[2] - INPUT_MEANS[2]) / INPUT_STDS[2],
-        (float)(inputs[3] - INPUT_MEANS[3]) / INPUT_STDS[3],
-        ((float)log(inputs[4] * 1.331 + 1.0) - INPUT_MEANS[4]) / INPUT_STDS[4],
-    };
-
-    // input layer
     alignas(64) float buffer1[LAYER_SIZES[0]] = {};
     alignas(64) float buffer2[LAYER_SIZES[1]] = {};
-    mlpLayer(scaled_inputs, buffer1, W0, B0, N_INPUTS, LAYER_SIZES[0]);
+    mlpLayer(scaledInputs, buffer1, W0, B0, N_INPUTS, LAYER_SIZES[0]);
     mlpLayer(buffer1, buffer2, W1, B1, LAYER_SIZES[0], LAYER_SIZES[1]);
     return outputLayer(buffer2, W2, B2[0], LAYER_SIZES[1]);
 }

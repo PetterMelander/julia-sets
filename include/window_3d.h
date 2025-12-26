@@ -16,10 +16,38 @@
 class Window3D
 {
 public:
-  GLFWwindow *windowPtr;
-
   cudaGraphicsResource *cudaPboResources[2];
   cudaGraphicsResource *cudaVboResources[2];
+
+  Window3D(int width, int height, GLFWwindow *windowPtr);
+
+  inline void updateState() { processMovement(0.01); }
+
+  inline void redraw(bool depthPass = true)
+  {
+    switchTexture(activeBuffer);
+    redrawImage(activeBuffer, depthPass);
+  }
+
+  inline void updateView()
+  {
+    shader->use();
+    glm::mat4 transform = camera.GetTransform();
+    shader->setMat4("lookAt", transform);
+  }
+
+  inline void switchBuffer() { activeBuffer = (activeBuffer + 1) % 2; }
+
+  inline int getBufferIndex() { return activeBuffer; }
+
+  inline int getNextBufferIndex() { return (activeBuffer + 1) % 2; }
+
+  inline void swap() { glfwSwapBuffers(windowPtr); }
+
+  inline bool getNeedsRedraw() { return needsRedraw; }
+
+private:
+  GLFWwindow *windowPtr;
 
   int width;
   int height;
@@ -29,51 +57,15 @@ public:
 
   Camera camera{width, height};
 
-  Window3D(int width, int height, GLFWwindow *windowPtr);
-
-  void updateState()
-  {
-    processMovement(0.01);
-  }
-
-  void redraw(bool depthPass = true)
-  {
-    switchTexture(activeBuffer);
-    redrawImage(activeBuffer, depthPass);
-  }
-
-  void updateView()
-  {
-    shader->use();
-    glm::mat4 transform = camera.GetTransform();
-    shader->setMat4("lookAt", transform);
-  }
-
-  void switchBuffer()
-  {
-    activeBuffer = (activeBuffer + 1) % 2;
-  }
-
-  int getBufferIndex() { return activeBuffer; }
-
-  int getNextBufferIndex() { return (activeBuffer + 1) % 2; }
-
-  void swap() {
-    glfwSwapBuffers(windowPtr);
-  }
-
-private:
   GLuint pboIds[2];
   GLuint heightMap;
   GLuint vaoIds[2];
   GLuint vboIds[2];
   GLuint ebo;
-
   std::unique_ptr<Shader> shader;
 
   GLuint depthMapFBO;
   GLuint depthMap;
-  
   unsigned int SHADOW_WIDTH = width * 4;
   unsigned int SHADOW_HEIGHT = height * 4;
   const glm::mat4 lightProjection = glm::ortho(-1.0f, 1.0f, -1.0f, 1.0f, 0.4f, 1.5f);
@@ -93,8 +85,9 @@ private:
 
   void redrawImage(int index, bool depthPass = true)
   {
-    
-    if (depthPass) {
+
+    if (depthPass)
+    {
       depthShader->use();
       glActiveTexture(GL_TEXTURE1);
       glBindTexture(GL_TEXTURE_2D, heightMap);

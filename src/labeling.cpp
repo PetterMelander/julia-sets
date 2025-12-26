@@ -56,6 +56,7 @@ void saveImage(Window2D *window, bool sufficientPrecision)
     {
         std::cerr << "Could not open csv file." << std::endl;
     }
-    csvFile << filename << "," << window->c.real() << "," << window->c.imag() << "," << window->xOffset << "," << window->yOffset << "," << window->zoomLevel << "\n";
+    csvFile << filename << "," << window->c.real() << "," << window->c.imag() << ","
+    << window->xOffset << "," << window->yOffset << "," << window->zoomLevel << "\n";
     csvFile.close();
 }

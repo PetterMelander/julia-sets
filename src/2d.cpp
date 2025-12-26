@@ -11,12 +11,7 @@
 
 #include "avx_kernels.h"
 #include "cuda_kernels.cuh"
-#include "mlp.h"
 #include "window_2d.h"
-
-#include "cnn.h"
-#include "mlp_constants.h"
-#include "xgb.h"
 
 #ifdef WIN32
 #include <windows.h>
@@ -48,35 +43,11 @@ void computeJulia(Window2D &window, Npp8u *nppBuffer)
   CUDA_CHECK(cudaGraphicsResourceGetMappedPointer(
       (void **)&dTargetTex, nullptr, window.cudaPboResources[bufferIndex]));
 
-  float result = 0;
-  
-  // enqueue cnn pred
-  cnn.enqueue(window.c, window.zoomLevel, window.xOffset, window.yOffset);
-
-  // xgb pred
-  std::vector<Entry> entries(5);
-  entries[0].fvalue = ((float)window.c.real() - INPUT_MEANS[0]) / INPUT_STDS[0];
-  entries[1].fvalue = ((float)window.c.imag() - INPUT_MEANS[1]) / INPUT_STDS[1];
-  entries[2].fvalue = ((float)window.xOffset - INPUT_MEANS[2]) / INPUT_STDS[2];
-  entries[3].fvalue = ((float)window.yOffset - INPUT_MEANS[3]) / INPUT_STDS[3];
-  entries[4].fvalue = ((float)log(window.zoomLevel * 1.331 * window.width / 224.0 + 1.0) - INPUT_MEANS[4]) / INPUT_STDS[4];
-  predict(entries.data(), 0, &result);
-
-  // mlp pred
-  double windowParams[] = {window.c.real(), window.c.imag(), window.xOffset, window.yOffset, window.zoomLevel}; 
-  result += 1.0f / (1.0f + expf(-mlpPredict(windowParams)));
-  
-  // get cnn pred
-  result += 2.0f * 1.0f / (1.0f + expf(-cnn.getPred()));
-  
-  // weight ensemble 1 - 1 - 2
-  result /= 4.0f;
-  if (result >= 0.5f)
+  if (window.spSufficient())
     computeJuliaCuda(window.width, window.height, window.c, window.zoomLevel, window.xOffset,
                      window.yOffset, dTargetTex, stream);
   else
   {
-    std::cout << "insufficient precision" << std::endl;
     computeJuliaAvx(window.width, window.height, window.c, window.zoomLevel, window.xOffset,
                     window.yOffset, window.hCudaBuffers[bufferIndex]);
     CUDA_CHECK(cudaMemcpyAsync(dTargetTex, window.hCudaBuffers[bufferIndex],
@@ -126,8 +97,8 @@ int main()
   glfwWindowHint(GLFW_BLUE_BITS, mode->blueBits);
   glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
 
-  int width = 224;
-  int height = 224;
+  int width = mode->width * 0.75;
+  int height = mode->height * 0.75;
 
   // width must be multiple of 8 for avx kernel to work
   width = (width + 7) / 8 * 8;

@@ -1,4 +1,3 @@
-import emlearn
 import numpy as np
 import polars as pl
 import tl2cgen
@@ -9,19 +8,23 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import StandardScaler
 
 df_train_pos = pl.read_csv("sufficient.csv")
-df_train_pos = pl.concat([df_train_pos, pl.read_csv("sufficient2.csv").drop("filename")])
+df_train_pos = pl.concat(
+    [df_train_pos, pl.read_csv("sufficient3.csv").drop("filename")]
+)
 df_train_pos = df_train_pos.with_columns(pl.lit(1).alias("sufficient"))
 
 df_train_neg = pl.read_csv("insufficient.csv")
-df_train_neg = pl.concat([df_train_neg, pl.read_csv("insufficient2.csv").drop("filename")])
+df_train_neg = pl.concat(
+    [df_train_neg, pl.read_csv("insufficient3.csv").drop("filename")]
+)
 df_train_neg = df_train_neg.with_columns(pl.lit(0).alias("sufficient"))
 
 df_train = pl.concat([df_train_neg, df_train_pos]).unique()
 
-df_val_pos = pl.read_csv("sufficient2_val.csv").drop("filename")
+df_val_pos = pl.read_csv("sufficient3_val.csv").drop("filename")
 df_val_pos = df_val_pos.with_columns(pl.lit(1).alias("sufficient"))
 
-df_val_neg = pl.read_csv("insufficient2_val.csv").drop("filename")
+df_val_neg = pl.read_csv("insufficient3_val.csv").drop("filename")
 df_val_neg = df_val_neg.with_columns(pl.lit(0).alias("sufficient"))
 
 df_val = pl.concat([df_val_neg, df_val_pos]).unique()
@@ -40,51 +43,53 @@ scaler.fit(X_train)
 X_train = scaler.transform(X_train)
 X_val = scaler.transform(X_val)
 
-model = xgboost.XGBClassifier(n_estimators=3, max_depth=5)
+model = xgboost.XGBClassifier(n_estimators=5, max_depth=5)
 model.fit(X_train, y_train)
 
 preds = model.predict(X_val)
-pred_probs = model.predict_proba(X_val)[:,0]
+pred_probs = model.predict_proba(X_val)[:, 0]
 
 print(metrics.accuracy_score(y_val, preds))
 print(metrics.recall_score(y_val, preds))
 print(metrics.roc_auc_score(y_val, pred_probs))
 print(metrics.confusion_matrix(y_val, preds))
-
-# cmodel = emlearn.convert(model, method="inline")
-# cmodel.save(file="test.h", name="test")
 
 tl_model = treelite.frontend.from_xgboost(model.get_booster())
-tl2cgen.generate_c_code(tl_model, "./test", params={})
+tl2cgen.generate_c_code(tl_model, "./xgb", params={})
 
-model = MLPClassifier(hidden_layer_sizes=(16, 16, 16, 16, 16,), 
-                      activation='relu', 
-                      solver='adam', 
-                    #   max_iter=100,
-                        learning_rate="adaptive",
-                      early_stopping=True,
-                      random_state=1)
+model = MLPClassifier(
+    hidden_layer_sizes=(32, 32),
+    activation="relu",
+    solver="adam",
+    # max_iter=100,
+    learning_rate="adaptive",
+    early_stopping=True,
+    validation_fraction=0.05,
+    random_state=1,
+)
 model.fit(X_train, y_train)
 
 preds = model.predict(X_val)
-pred_probs = model.predict_proba(X_val)[:,0]
+pred_probs = model.predict_proba(X_val)[:, 0]
 
 print(metrics.accuracy_score(y_val, preds))
 print(metrics.recall_score(y_val, preds))
 print(metrics.roc_auc_score(y_val, pred_probs))
 print(metrics.confusion_matrix(y_val, preds))
 
-with open("test.h", "w") as f:
+with open("mlp_constants.h", "w") as f:
     f.write("#pragma once\n\n")
     f.write(f"inline constexpr int N_INPUTS = {model.n_features_in_};\n")
     f.write(f"inline constexpr int N_LAYERS = {model.n_layers_ - 2};\n")
-    f.write(f"inline constexpr int LAYER_SIZES[] = {{{", ".join(str(l.shape[0]) for l in model.coefs_[1:])}}};\n")
+    f.write(
+        f"inline constexpr int LAYER_SIZES[] = {{{', '.join(str(l.shape[0]) for l in model.coefs_[1:])}}};\n"
+    )
 
     def write_array(name: str, array: np.ndarray, align: bool = True) -> None:
         if align:
             f.write("alignas(64) ")
         f.write(f"inline constexpr float {name}[] = {{")
-        f.write(", ".join(map(str, array.astype(np.float32).flatten())))
+        np.savetxt(f, array.reshape(1, -1), delimiter=", ", fmt="%.8g", newline="")
         f.write("};\n")
 
     write_array("INPUT_MEANS", scaler.mean_, False)
@@ -95,8 +100,3 @@ with open("test.h", "w") as f:
     write_array("B1", model.intercepts_[1])
     write_array("W2", model.coefs_[2])
     write_array("B2", model.intercepts_[2])
-    write_array("W3", model.coefs_[3])
-    write_array("B3", model.intercepts_[3])
-    write_array("W4", model.coefs_[4])
-    write_array("B4", model.intercepts_[4])
-    

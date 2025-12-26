@@ -179,11 +179,14 @@ Window2D::Window2D(int width, int height, GLFWwindow *windowPtr)
 
 Window2D::~Window2D()
 {
-  cudaFreeHost(hCudaBuffers[0]);
-  cudaFreeHost(hCudaBuffers[1]);
-  cudaFree(dUpdateRelativeError);
-  cudaFreeHost(hUpdateRelativeError);
+  CUDA_CHECK(cudaFreeHost(hCudaBuffers[0]));
+  CUDA_CHECK(cudaFreeHost(hCudaBuffers[1]));
+  CUDA_CHECK(cudaFree(dUpdateRelativeError));
+  CUDA_CHECK(cudaFreeHost(hUpdateRelativeError));
 
-  cudaFree(dLabelImage);
+  CUDA_CHECK(cudaStreamDestroy(streams[0]));
+  CUDA_CHECK(cudaStreamDestroy(streams[1]));
+
+  CUDA_CHECK(cudaFree(dLabelImage));
   delete[] hLabelImage;
 }

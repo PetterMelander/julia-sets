@@ -15,38 +15,40 @@ using namespace nvinfer1;
 class CNNModel
 {
 public:
+    static constexpr int imgSize = 224;
+
     CNNModel(std::string engineName, std::string onnxName)
     {
         if (!std::filesystem::exists(engineName))
             buildEngine(onnxName, engineName);
         loadEngine(engineName);
 
-        cudaMallocHost((void **)&hOutBuf, sizeof(float));
+        CUDA_CHECK(cudaMallocHost((void **)&hOutBuf, sizeof(float)));
 
-        cudaMalloc((void **)&dInBuf, imgSize * imgSize * sizeof(float));
-        cudaMalloc((void **)&dOutBuf, sizeof(float));
-        cudaStreamCreate(&stream);
+        CUDA_CHECK(cudaMalloc((void **)&dInBuf, imgSize * imgSize * sizeof(float)));
+        CUDA_CHECK(cudaMalloc((void **)&dOutBuf, sizeof(float)));
+        CUDA_CHECK(cudaStreamCreate(&stream));
 
         context->setTensorAddress("input", dInBuf);
         context->setTensorAddress("output", dOutBuf);
 
         cudaGraph_t graph;
-        cudaStreamBeginCapture(stream, cudaStreamCaptureModeGlobal);
+        CUDA_CHECK(cudaStreamBeginCapture(stream, cudaStreamCaptureModeGlobal));
         context->enqueueV3(stream);
-        cudaMemcpyAsync(hOutBuf, dOutBuf, sizeof(float), cudaMemcpyDeviceToHost, stream);
-        cudaStreamEndCapture(stream, &graph);
-        cudaGraphInstantiate(&graphInstance, graph, 0);
-        cudaGraphDestroy(graph);
+        CUDA_CHECK(cudaMemcpyAsync(hOutBuf, dOutBuf, sizeof(float), cudaMemcpyDeviceToHost, stream));
+        CUDA_CHECK(cudaStreamEndCapture(stream, &graph));
+        CUDA_CHECK(cudaGraphInstantiate(&graphInstance, graph, 0));
+        CUDA_CHECK(cudaGraphDestroy(graph));
     }
 
     ~CNNModel()
     {
-        cudaFreeHost(hOutBuf);
-        cudaFree(dInBuf);
-        cudaFree(dOutBuf);
+        CUDA_CHECK(cudaFreeHost(hOutBuf));
+        CUDA_CHECK(cudaFree(dInBuf));
+        CUDA_CHECK(cudaFree(dOutBuf));
 
-        cudaStreamDestroy(stream);
-        cudaGraphExecDestroy(graphInstance);
+        CUDA_CHECK(cudaStreamDestroy(stream));
+        CUDA_CHECK(cudaGraphExecDestroy(graphInstance));
 
         delete context;
         delete engine;
@@ -55,18 +57,16 @@ public:
     void enqueue(std::complex<double> c, double zoomLevel, double xOffset, double yOffset)
     {
         computeJuliaCuda(imgSize, imgSize, c, zoomLevel, xOffset, yOffset, dInBuf, stream);
-        cudaGraphLaunch(graphInstance, stream);
+        CUDA_CHECK(cudaGraphLaunch(graphInstance, stream));
     }
 
     float getPred()
     {
-        cudaStreamSynchronize(stream);
+        CUDA_CHECK(cudaStreamSynchronize(stream));
         return *hOutBuf;
     }
 
 private:
-    int imgSize = 224;
-
     ICudaEngine *engine;
     IExecutionContext *context;
 
@@ -84,7 +84,8 @@ private:
             if (severity <= Severity::kWARNING)
                 std::cout << msg << std::endl;
         }
-    } logger;
+    };
+    inline static Logger logger;
 
     bool readFile(const std::string &fileName, std::vector<char> &buffer)
     {
@@ -110,7 +111,7 @@ private:
     bool buildEngine(std::string &onnxName, std::string &engineName)
     {
         IBuilder *builder = createInferBuilder(logger);
-        INetworkDefinition *network = builder->createNetworkV2(0U);
+        INetworkDefinition *network = builder->createNetworkV2(1U);
 
         IParser *parser = createParser(*network, logger);
         std::vector<char> modelData;
@@ -152,5 +153,7 @@ private:
         readFile(engineName, modelData);
         engine = runtime->deserializeCudaEngine(modelData.data(), modelData.size());
         context = engine->createExecutionContext();
+
+        delete runtime;
     }
 };

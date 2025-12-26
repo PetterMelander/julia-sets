@@ -23,6 +23,8 @@ inline void scrollCallback(GLFWwindow *window, double xOffset, double yOffset)
 {
   Window2D *window2d = static_cast<Window2D *>(glfwGetWindowUserPointer(window));
 
+  window2d->updatePrecision();
+
   double oldZoom = window2d->zoomLevel;
   if (yOffset > 0.0)
   {
