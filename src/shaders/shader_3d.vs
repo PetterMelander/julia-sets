@@ -4,8 +4,8 @@ layout (location = 1) in vec2 aNorm;
 
 uniform mat4 lookAt;
 uniform sampler2D heightMap;
-uniform float xstep; // TODO: make constant?
-uniform float ystep; // TODO: make constant?
+uniform float xstep;
+uniform float ystep;
 uniform mat4 lightSpaceMatrix;
 uniform vec2 texStretching;
 

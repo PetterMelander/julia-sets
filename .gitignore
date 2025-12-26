@@ -1,5 +1,9 @@
 .vscode
 build
+release
+debug
+out
+vendor
 
 # Prerequisites
 *.d

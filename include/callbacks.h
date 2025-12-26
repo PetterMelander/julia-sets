@@ -3,6 +3,7 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
+#include "labeling.h"
 #include "window_2d.h"
 
 inline void framebufferSizeCallback(GLFWwindow *window, int width, int height)
@@ -21,6 +22,8 @@ inline void mouseCallback(GLFWwindow *window, double xposIn, double yposIn)
 inline void scrollCallback(GLFWwindow *window, double xOffset, double yOffset)
 {
   Window2D *window2d = static_cast<Window2D *>(glfwGetWindowUserPointer(window));
+
+  window2d->updatePrecision();
 
   double oldZoom = window2d->zoomLevel;
   if (yOffset > 0.0)
@@ -75,5 +78,15 @@ inline void keyCallback(GLFWwindow *window, int key, int scancode, int action, i
   {
     Window2D *window2d = static_cast<Window2D *>(glfwGetWindowUserPointer(window));
     window2d->paused = !window2d->paused;
+  }
+  if (key == GLFW_KEY_1)
+  {
+    Window2D *window2d = static_cast<Window2D *>(glfwGetWindowUserPointer(window));
+    saveImage(window2d, true);
+  }
+  if (key == GLFW_KEY_2)
+  {
+    Window2D *window2d = static_cast<Window2D *>(glfwGetWindowUserPointer(window));
+    saveImage(window2d, false);
   }
 }

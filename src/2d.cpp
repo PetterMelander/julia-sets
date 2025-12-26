@@ -22,6 +22,7 @@ extern "C"
 #endif
 
 NppStreamContext ctx;
+CNNModel cnn("medium.trt", "medium.onnx");
 
 void computeJulia(Window2D &window, Npp8u *nppBuffer)
 {
@@ -42,7 +43,7 @@ void computeJulia(Window2D &window, Npp8u *nppBuffer)
   CUDA_CHECK(cudaGraphicsResourceGetMappedPointer(
       (void **)&dTargetTex, nullptr, window.cudaPboResources[bufferIndex]));
 
-  if (window.zoomLevel < 10000.0)
+  if (window.spSufficient())
     computeJuliaCuda(window.width, window.height, window.c, window.zoomLevel, window.xOffset,
                      window.yOffset, dTargetTex, stream);
   else
@@ -96,8 +97,8 @@ int main()
   glfwWindowHint(GLFW_BLUE_BITS, mode->blueBits);
   glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
 
-  int width = mode->width;
-  int height = mode->height;
+  int width = mode->width * 0.75;
+  int height = mode->height * 0.75;
 
   // width must be multiple of 8 for avx kernel to work
   width = (width + 7) / 8 * 8;
@@ -122,9 +123,8 @@ int main()
   cudaStreamDestroy(stream);
   CUDA_CHECK(cudaMalloc(&nppBuffer, nppBufferSize));
 
-
   GLFWwindow *windowPtr;
-  windowPtr = glfwCreateWindow(width, height, "Julia", primaryMonitor, NULL);
+  windowPtr = glfwCreateWindow(width, height, "Julia", NULL, NULL);
   if (windowPtr == NULL)
   {
     std::cout << "Failed to create window" << std::endl;

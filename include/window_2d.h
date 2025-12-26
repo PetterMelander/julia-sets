@@ -15,6 +15,11 @@
 #include "cuda_kernels.cuh"
 #include "shader.h"
 
+#include "cnn.h"
+#include "mlp.h"
+#include "mlp_constants.h"
+#include "xgb.h"
+
 class Window2D
 {
 public:
@@ -46,11 +51,15 @@ public:
   bool needsTextureSwitch = false;
   bool paused = false;
 
+  int labelSize = 224;
+  float *dLabelImage;
+  float *hLabelImage;
+
   Window2D(int width, int height, GLFWwindow *windowPtr);
 
   ~Window2D();
 
-  void updateState()
+  inline void updateState()
   {
     CUDA_CHECK(cudaStreamSynchronize(streams[(activeBuffer + 1) % 2]));
     updateTheta();
@@ -62,13 +71,13 @@ public:
     }
   }
 
-  void redraw(bool switchTex = true)
+  inline void redraw(bool switchTex = true)
   {
     if (switchTex)
     {
       switchTexture(activeBuffer);
     }
-      redrawImage();
+    redrawImage();
     if (needsRedraw)
     {
       needsRedraw = false;
@@ -80,18 +89,60 @@ public:
     }
   }
 
-  void switchBuffer()
+  inline void switchBuffer() { activeBuffer = (activeBuffer + 1) % 2; }
+
+  inline int getBufferIndex() { return activeBuffer; }
+
+  inline int getNextBufferIndex() { return (activeBuffer + 1) % 2; }
+
+  inline void swap(){ glfwSwapBuffers(windowPtr); }
+
+  void updatePrecision()
   {
-    activeBuffer = (activeBuffer + 1) % 2;
+    float minDim = std::min(width, height);
+    float newZoom = zoomLevel * powf(1.1f, 5.0f) * minDim / cnn.imgSize;
+
+    if (newZoom < 300.0f)
+    {
+      singlePrecision = true;
+      return;
+    }
+    else if (newZoom > 100000.0f)
+    {
+      singlePrecision = false;
+      return;
+    }
+
+    float result = 0;
+
+    // enqueue cnn pred
+    cnn.enqueue(c, newZoom, xOffset, yOffset);
+
+    // xgb pred
+    std::vector<Entry> entries(5);
+    entries[0].fvalue = ((float)c.real() - INPUT_MEANS[0]) / INPUT_STDS[0];
+    entries[1].fvalue = ((float)c.imag() - INPUT_MEANS[1]) / INPUT_STDS[1];
+    entries[2].fvalue = ((float)xOffset - INPUT_MEANS[2]) / INPUT_STDS[2];
+    entries[3].fvalue = ((float)yOffset - INPUT_MEANS[3]) / INPUT_STDS[3];
+    entries[4].fvalue = ((float)log(newZoom + 1.0) - INPUT_MEANS[4]) / INPUT_STDS[4];
+    predict(entries.data(), 0, &result);
+
+    // mlp pred
+    float windowParams[] = {entries[0].fvalue, entries[1].fvalue,
+                            entries[2].fvalue, entries[3].fvalue,
+                            entries[4].fvalue};
+    result += 1.0f / (1.0f + expf(-mlpPredict(windowParams)));
+
+    // get cnn pred
+    result += 2.0f * 1.0f / (1.0f + expf(-cnn.getPred()));
+
+    // weight ensemble 1 - 1 - 2
+    result /= 4.0f;
+
+    singlePrecision = result >= 0.5f;
   }
 
-  int getBufferIndex() { return activeBuffer; }
-
-  int getNextBufferIndex() { return (activeBuffer + 1) % 2; }
-
-  void swap() {
-    glfwSwapBuffers(windowPtr);
-  }
+  inline bool spSufficient() { return singlePrecision; }
 
 private:
   GLuint pboIds[2];
@@ -107,6 +158,9 @@ private:
   static constexpr double length = 0.7885;
 
   double lastThetaUpdate = 0;
+  bool singlePrecision = true;
+
+  CNNModel cnn = CNNModel("cnn.trt", "cnn.onnx");
 
   void updateC()
   {
@@ -165,7 +219,7 @@ private:
   void redrawImage()
   {
     glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
-    
+
     glViewport(0, 0, width, height);
     shader->use();
 
@@ -174,5 +228,5 @@ private:
 
     glBindVertexArray(vao);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-    }
+  }
 };

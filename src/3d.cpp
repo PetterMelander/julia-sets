@@ -61,7 +61,7 @@ void computeJulia(Window2D &window2D, Window3D &window3D,
       (void **)&dVbo3D, nullptr, window3D.cudaVboResources[bufferIndex]));
 
   // Compute new julia set
-  if (window2D.zoomLevel < 10000.0)
+  if (window2D.spSufficient())
     computeJuliaCuda(window2D.width, window2D.height, window2D.c, window2D.zoomLevel,
                      window2D.xOffset, window2D.yOffset, dTargetTex2D, stream);
   else
@@ -159,7 +159,7 @@ int main()
   NPP_CHECK(nppiAverageRelativeErrorGetBufferHostSize_32f_C1R_Ctx(size, &errorBufferSize, ctx));
   Npp8u *nppBuffer;
   CUDA_CHECK(cudaStreamSynchronize(stream));
-  cudaStreamDestroy(stream);
+  CUDA_CHECK(cudaStreamDestroy(stream));
   CUDA_CHECK(cudaMalloc(&nppBuffer, std::max(minMaxBufferSize, errorBufferSize)));
 
 
@@ -213,7 +213,7 @@ int main()
 
       window2D.swap();
     }
-    else if (window3D.needsRedraw)
+    else if (window3D.getNeedsRedraw())
     {
       window3D.switchBuffer();
       window3D.updateView();
