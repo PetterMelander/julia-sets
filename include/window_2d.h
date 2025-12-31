@@ -69,7 +69,7 @@ public:
 
   inline int getNextBufferIndex() { return (activeBuffer + 1) % 2; }
 
-  inline void swap(){ glfwSwapBuffers(windowPtr); }
+  inline void swap() { glfwSwapBuffers(windowPtr); }
 
   void updatePrecision();
 
@@ -80,32 +80,70 @@ private:
   GLuint texture;
   GLuint vao;
   GLuint vbo;
-
   std::unique_ptr<Shader> shader;
+
+  GLuint cFbo;
+  GLuint cTex;
+  GLuint cVao;
+  GLuint cVbo;
+  std::unique_ptr<Shader> cPointShader;
+  std::unique_ptr<Shader> cFadeShader;
 
   static constexpr double R = 1.7320508075688772; // sqrt(3)
   static constexpr double r = 2.2;
   static constexpr double d = 0.3;
   static constexpr double length = 0.7885;
+  static constexpr int cPlotSize = 240;
 
-  double lastThetaUpdate = 0;
+  double lastThetaUpdate = 0.001;
   bool singlePrecision = true;
 
-  CNNModel cnn = CNNModel("cnn.trt", "cnn.onnx");
+  CNNModel cnn = CNNModel("cnn.engine", "cnn.onnx");
 
   inline void updateC()
   {
-    c.real(sin(sqrt(2.0) * theta));
-    c.imag(sin(theta));
-    // c.real((R - r) * cos(theta) + d * cos((R - r) * theta / r));
-    // c.imag((R - r) * sin(theta) - d * sin((R - r) * theta / r));
-    // c.real(length * cos(theta));
-    // c.imag(length * sin(theta));
+    if (!paused)
+    {
+      c.real(sin(sqrt(2.0) * theta) - 0.5);
+      c.imag(sin(theta));
+      // c.real((R - r) * cos(theta) + d * cos((R - r) * theta / r));
+      // c.imag((R - r) * sin(theta) - d * sin((R - r) * theta / r));
+      // c.real(length * cos(theta));
+      // c.imag(length * sin(theta));
+    }
+    else
+    {
+      if (glfwGetKey(windowPtr, GLFW_KEY_W) == GLFW_PRESS)
+      {
+        c.imag(c.imag() + 0.001 / (zoomLevel * zoomLevel));
+        needsRedraw = true;
+      }
+      if (glfwGetKey(windowPtr, GLFW_KEY_S) == GLFW_PRESS)
+      {
+        c.imag(c.imag() - 0.001 / (zoomLevel * zoomLevel));
+        needsRedraw = true;
+      }
+      if (glfwGetKey(windowPtr, GLFW_KEY_A) == GLFW_PRESS)
+      {
+        c.real(c.real() - 0.001 / (zoomLevel * zoomLevel));
+        needsRedraw = true;
+      }
+      if (glfwGetKey(windowPtr, GLFW_KEY_D) == GLFW_PRESS)
+      {
+        c.real(c.real() + 0.001 / (zoomLevel * zoomLevel));
+        needsRedraw = true;
+      }
+    }
+    glBindBuffer(GL_ARRAY_BUFFER, cVbo);
+    float tmp[] = {(float)c.real() + 0.5f, (float)c.imag()};
+    glBufferData(GL_ARRAY_BUFFER, 2 * sizeof(float), tmp, GL_DYNAMIC_DRAW);
   }
 
   void updatePan();
 
   void updateTheta();
+
+  void incrementTheta(double increment);
 
   void switchTexture(int index);
 

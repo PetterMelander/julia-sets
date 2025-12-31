@@ -78,6 +78,7 @@ bool CNNModel::buildEngine(std::string &onnxName, std::string &engineName)
     }
 
     IBuilderConfig *config = builder->createBuilderConfig();
+    config->setBuilderOptimizationLevel(5);
     IHostMemory *serializedModel = builder->buildSerializedNetwork(*network, *config);
 
     std::ofstream file(engineName, std::ios::binary);

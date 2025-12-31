@@ -169,7 +169,6 @@ void Window3D::switchTexture(int index)
 
 void Window3D::redrawImage(int index, bool depthPass)
 {
-
   if (depthPass)
   {
     depthShader->use();
@@ -208,24 +207,28 @@ void Window3D::processMovement(float deltaTime)
   if (glfwGetKey(windowPtr, GLFW_KEY_W) == GLFW_PRESS)
   {
     camera.ProcessKeyboard(FORWARD, deltaTime);
+    shader->use();
     shader->setVec3("viewPos", camera.front);
     needsRedraw = true;
   }
   if (glfwGetKey(windowPtr, GLFW_KEY_S) == GLFW_PRESS)
   {
     camera.ProcessKeyboard(BACKWARD, deltaTime);
+    shader->use();
     shader->setVec3("viewPos", camera.front);
     needsRedraw = true;
   }
   if (glfwGetKey(windowPtr, GLFW_KEY_A) == GLFW_PRESS)
   {
     camera.ProcessKeyboard(LEFT, deltaTime);
+    shader->use();
     shader->setVec3("viewPos", camera.front);
     needsRedraw = true;
   }
   if (glfwGetKey(windowPtr, GLFW_KEY_D) == GLFW_PRESS)
   {
     camera.ProcessKeyboard(RIGHT, deltaTime);
+    shader->use();
     shader->setVec3("viewPos", camera.front);
     needsRedraw = true;
   }

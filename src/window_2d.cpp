@@ -136,12 +136,31 @@ Window2D::Window2D(int width, int height, GLFWwindow *windowPtr)
   glGenBuffers(1, &vbo);
   glBindBuffer(GL_ARRAY_BUFFER, vbo);
   glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), quadVertices, GL_STATIC_DRAW);
-
+  
   glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)0);
   glEnableVertexAttribArray(0);
   glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)(2 * sizeof(float)));
   glEnableVertexAttribArray(1);
+  
+  glGenFramebuffers(1, &cFbo);
+  glBindFramebuffer(GL_FRAMEBUFFER, cFbo);
+  glGenTextures(1, &cTex);
+  glBindTexture(GL_TEXTURE_2D, cTex);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, cPlotSize, cPlotSize, 0, GL_RGBA, GL_FLOAT, NULL);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, cTex, 0);
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
+  glGenVertexArrays(1, &cVao);
+  glBindVertexArray(cVao);
+  glGenBuffers(1, &cVbo);
+  glBindBuffer(GL_ARRAY_BUFFER, cVbo);
+  glBufferData(GL_ARRAY_BUFFER, 2 * sizeof(float), NULL, GL_DYNAMIC_DRAW);
+  glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+  glEnableVertexAttribArray(0);
+  glPointSize(2.5f);
+  
   // set window parameters and callbacks
   glfwSwapInterval(1);
   glfwSetWindowUserPointer(windowPtr, this);
@@ -156,7 +175,14 @@ Window2D::Window2D(int width, int height, GLFWwindow *windowPtr)
   // init shader
   shader = std::make_unique<Shader>("shaders/shader_2d.vs", "shaders/shader_2d.fs");
   shader->use();
-  shader->setInt("texture1", 0);
+  shader->setInt("juliaTexRaw", 0);
+
+  cPointShader = std::make_unique<Shader>("shaders/shader_point.vs", "shaders/shader_point.fs");
+  cPointShader->use();
+  cPointShader->setFloat("speed", 0.0f);
+  cFadeShader = std::make_unique<Shader>("shaders/shader_fade.vs", "shaders/shader_fade.fs");
+  cFadeShader->use();
+  cFadeShader->setFloat("increment", 0.0f);
 
   // init Npp vars
   CUDA_CHECK(cudaMalloc(&dUpdateRelativeError, sizeof(Npp64f)));
@@ -196,11 +222,7 @@ void Window2D::updateState()
   CUDA_CHECK(cudaStreamSynchronize(streams[(activeBuffer + 1) % 2]));
   updateTheta();
   updatePan();
-
-  if (needsRedraw)
-  {
-    updateC();
-  }
+  updateC();
 }
 
 void Window2D::redraw(bool switchTex)
@@ -285,21 +307,33 @@ void Window2D::updateTheta()
 {
   if (!paused)
   {
-    double thetaUpdate = 0.8 * lastThetaUpdate + std::min(0.001, exp(-*hUpdateRelativeError * 10000)) + 0.00001;
-    theta += std::min(lastThetaUpdate * 2.0, thetaUpdate);
+    double thetaUpdate = 0.7 * lastThetaUpdate + std::min(0.001, exp(-*hUpdateRelativeError * 10000)) + 0.00001;
+    double gradientSize = sqrt(pow(sqrt(2.0) * cos(theta), 2.0) + pow(cos(theta), 2.0));
+    thetaUpdate = std::min(lastThetaUpdate * 2.0, thetaUpdate);
     lastThetaUpdate = thetaUpdate;
-    needsRedraw = true;
+    incrementTheta(thetaUpdate / std::max(gradientSize, 0.1));
+    if (theta > 4.6 && thetaUpdate / std::max(gradientSize, 0.1) > 0.001)
+      std::cout << thetaUpdate / std::max(gradientSize, 0.1) << std::endl;
+    std::cout << theta << ", " << thetaUpdate << ", " << c.real() << ", " << c.imag() << std::endl;
   }
   else if (glfwGetKey(windowPtr, GLFW_KEY_LEFT) == GLFW_PRESS)
   {
-    theta -= 0.001 / zoomLevel;
-    needsRedraw = true;
+    incrementTheta(-0.001 / zoomLevel);
   }
   else if (glfwGetKey(windowPtr, GLFW_KEY_RIGHT) == GLFW_PRESS)
   {
-    theta += 0.001 / zoomLevel;
-    needsRedraw = true;
+    incrementTheta(0.001 / zoomLevel);
   }
+} 
+
+void Window2D::incrementTheta(double increment)
+{
+  theta += increment;
+  cFadeShader->use();
+  cFadeShader->setFloat("increment", 1.0f - std::abs(increment) * 0.1);
+  cPointShader->use();
+  cPointShader->setFloat("speed", 1.0f - std::abs(increment) * 200);
+  needsRedraw = true;
 }
 
 void Window2D::switchTexture(int index)
@@ -312,6 +346,7 @@ void Window2D::switchTexture(int index)
 
 void Window2D::redrawImage()
 {
+  // draw julia set
   glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
 
   glViewport(0, 0, width, height);
@@ -322,4 +357,28 @@ void Window2D::redrawImage()
 
   glBindVertexArray(vao);
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+  // fade c plot
+  glViewport(0, 0, cPlotSize, cPlotSize);
+  glBindFramebuffer(GL_FRAMEBUFFER, cFbo);
+  glEnable(GL_BLEND);
+  glBlendFunc(GL_ZERO, GL_SRC_COLOR);
+  cFadeShader->use();
+  glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  
+  // add new c point
+  cPointShader->use();
+  glBindVertexArray(cVao);
+  glDrawArrays(GL_POINTS, 0, 1);
+  glDisable(GL_BLEND);
+
+  // blit c plot to screen
+  glBindFramebuffer(GL_READ_FRAMEBUFFER, cFbo);
+  glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+  glBlitFramebuffer(
+    0, 0, cPlotSize, cPlotSize,
+    0, height - cPlotSize, cPlotSize, height,
+    GL_COLOR_BUFFER_BIT, GL_NEAREST
+  );
 }
