@@ -2,4 +2,4 @@
 
 #include "window_2d.h"
 
-void saveImage(Window2D *window, bool sufficientPrecision);
+void labelImage(Window2D *window, bool sufficientPrecision);

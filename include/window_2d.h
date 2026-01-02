@@ -20,8 +20,7 @@
 #include "mlp_constants.h"
 #include "xgb.h"
 
-class Window2D
-{
+class Window2D {
 public:
   GLFWwindow *windowPtr;
 
@@ -100,36 +99,29 @@ private:
 
   CNNModel cnn = CNNModel("cnn.engine", "cnn.onnx");
 
-  inline void updateC()
-  {
-    if (!paused)
-    {
-      c.real(sin(sqrt(2.0) * theta) - 0.5);
-      c.imag(sin(theta));
-      // c.real((R - r) * cos(theta) + d * cos((R - r) * theta / r));
-      // c.imag((R - r) * sin(theta) - d * sin((R - r) * theta / r));
-      // c.real(length * cos(theta));
-      // c.imag(length * sin(theta));
-    }
-    else
-    {
-      if (glfwGetKey(windowPtr, GLFW_KEY_W) == GLFW_PRESS)
-      {
+  inline void updateC() {
+    // if (needsRedraw) {
+    //   c.real(sin(sqrt(2.0) * theta) - 0.5);
+    //   c.imag(sin(theta));
+    //   // c.real((R - r) * cos(theta) + d * cos((R - r) * theta / r));
+    //   // c.imag((R - r) * sin(theta) - d * sin((R - r) * theta / r));
+    //   // c.real(length * cos(theta));
+    //   // c.imag(length * sin(theta));
+    // }
+    if (paused) {
+      if (glfwGetKey(windowPtr, GLFW_KEY_UP) == GLFW_PRESS) {
         c.imag(c.imag() + 0.001 / (zoomLevel * zoomLevel));
         needsRedraw = true;
       }
-      if (glfwGetKey(windowPtr, GLFW_KEY_S) == GLFW_PRESS)
-      {
+      if (glfwGetKey(windowPtr, GLFW_KEY_DOWN) == GLFW_PRESS) {
         c.imag(c.imag() - 0.001 / (zoomLevel * zoomLevel));
         needsRedraw = true;
       }
-      if (glfwGetKey(windowPtr, GLFW_KEY_A) == GLFW_PRESS)
-      {
+      if (glfwGetKey(windowPtr, GLFW_KEY_LEFT) == GLFW_PRESS) {
         c.real(c.real() - 0.001 / (zoomLevel * zoomLevel));
         needsRedraw = true;
       }
-      if (glfwGetKey(windowPtr, GLFW_KEY_D) == GLFW_PRESS)
-      {
+      if (glfwGetKey(windowPtr, GLFW_KEY_RIGHT) == GLFW_PRESS) {
         c.real(c.real() + 0.001 / (zoomLevel * zoomLevel));
         needsRedraw = true;
       }

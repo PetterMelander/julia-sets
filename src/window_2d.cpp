@@ -17,8 +17,7 @@
 #ifndef NDEBUG
 void APIENTRY glDebugOutput(GLenum source, GLenum type, unsigned int id,
                             GLenum severity, GLsizei length,
-                            const char *message, const void *userParam)
-{
+                            const char *message, const void *userParam) {
   // Ignore non-significant error/warning codes
   if (id == 131169 || id == 131185 || id == 131218 || id == 131204)
     return;
@@ -26,8 +25,7 @@ void APIENTRY glDebugOutput(GLenum source, GLenum type, unsigned int id,
   std::cout << "---------------" << std::endl;
   std::cout << "Debug message (" << id << "): " << message << std::endl;
 
-  switch (source)
-  {
+  switch (source) {
   case GL_DEBUG_SOURCE_API:
     std::cout << "Source: API";
     break;
@@ -49,8 +47,7 @@ void APIENTRY glDebugOutput(GLenum source, GLenum type, unsigned int id,
   }
   std::cout << std::endl;
 
-  switch (type)
-  {
+  switch (type) {
   case GL_DEBUG_TYPE_ERROR:
     std::cout << "Type: Error";
     break;
@@ -86,27 +83,25 @@ void APIENTRY glDebugOutput(GLenum source, GLenum type, unsigned int id,
 #endif
 
 Window2D::Window2D(int width, int height, GLFWwindow *windowPtr)
-    : windowPtr(windowPtr), width(width), height(height)
-{
+    : windowPtr(windowPtr), width(width), height(height) {
 
 #ifndef NDEBUG
   int flags;
   glGetIntegerv(GL_CONTEXT_FLAGS, &flags);
-  if (flags & GL_CONTEXT_FLAG_DEBUG_BIT)
-  {
+  if (flags & GL_CONTEXT_FLAG_DEBUG_BIT) {
     glEnable(GL_DEBUG_OUTPUT);
     glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS); // Makes sure errors are displayed at
                                            // the moment they happen
     glDebugMessageCallback(glDebugOutput, nullptr);
-    glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_TRUE);
+    glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr,
+                          GL_TRUE);
   }
 #endif
 
   // allocate buffers, texture, etc.
   int dSize = width * height * sizeof(float);
   glGenBuffers(2, pboIds);
-  for (int i = 0; i < 2; ++i)
-  {
+  for (int i = 0; i < 2; ++i) {
     CUDA_CHECK(cudaStreamCreate(&streams[i]));
 
     CUDA_CHECK(cudaMallocHost(&hCudaBuffers[i], dSize));
@@ -122,34 +117,37 @@ Window2D::Window2D(int width, int height, GLFWwindow *windowPtr)
   glBindTexture(GL_TEXTURE_2D, texture);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, width, height, 0, GL_RED, GL_FLOAT, 0);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, width, height, 0, GL_RED, GL_FLOAT,
+               0);
 
   glGenVertexArrays(1, &vao);
   glBindVertexArray(vao);
 
   float quadVertices[] = {
-    -1.0f, 1.0f, 0.0f, 1.0f,
-    -1.0f, -1.0f, 0.0f, 0.0f,
-    1.0f, 1.0f, 1.0f, 1.0f,
-    1.0f, -1.0f, 1.0f, 0.0f,
+      -1.0f, 1.0f, 0.0f, 1.0f, -1.0f, -1.0f, 0.0f, 0.0f,
+      1.0f,  1.0f, 1.0f, 1.0f, 1.0f,  -1.0f, 1.0f, 0.0f,
   };
   glGenBuffers(1, &vbo);
   glBindBuffer(GL_ARRAY_BUFFER, vbo);
-  glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), quadVertices, GL_STATIC_DRAW);
-  
+  glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), quadVertices,
+               GL_STATIC_DRAW);
+
   glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)0);
   glEnableVertexAttribArray(0);
-  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)(2 * sizeof(float)));
+  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float),
+                        (void *)(2 * sizeof(float)));
   glEnableVertexAttribArray(1);
-  
+
   glGenFramebuffers(1, &cFbo);
   glBindFramebuffer(GL_FRAMEBUFFER, cFbo);
   glGenTextures(1, &cTex);
   glBindTexture(GL_TEXTURE_2D, cTex);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, cPlotSize, cPlotSize, 0, GL_RGBA, GL_FLOAT, NULL);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, cPlotSize, cPlotSize, 0, GL_RGBA,
+               GL_FLOAT, NULL);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, cTex, 0);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                         cTex, 0);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
   glGenVertexArrays(1, &cVao);
@@ -157,10 +155,10 @@ Window2D::Window2D(int width, int height, GLFWwindow *windowPtr)
   glGenBuffers(1, &cVbo);
   glBindBuffer(GL_ARRAY_BUFFER, cVbo);
   glBufferData(GL_ARRAY_BUFFER, 2 * sizeof(float), NULL, GL_DYNAMIC_DRAW);
-  glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+  glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void *)0);
   glEnableVertexAttribArray(0);
   glPointSize(2.5f);
-  
+
   // set window parameters and callbacks
   glfwSwapInterval(1);
   glfwSetWindowUserPointer(windowPtr, this);
@@ -173,14 +171,17 @@ Window2D::Window2D(int width, int height, GLFWwindow *windowPtr)
   glfwSetFramebufferSizeCallback(windowPtr, framebufferSizeCallback);
 
   // init shader
-  shader = std::make_unique<Shader>("shaders/shader_2d.vs", "shaders/shader_2d.fs");
+  shader =
+      std::make_unique<Shader>("shaders/shader_2d.vs", "shaders/shader_2d.fs");
   shader->use();
   shader->setInt("juliaTexRaw", 0);
 
-  cPointShader = std::make_unique<Shader>("shaders/shader_point.vs", "shaders/shader_point.fs");
+  cPointShader = std::make_unique<Shader>("shaders/shader_point.vs",
+                                          "shaders/shader_point.fs");
   cPointShader->use();
   cPointShader->setFloat("speed", 0.0f);
-  cFadeShader = std::make_unique<Shader>("shaders/shader_fade.vs", "shaders/shader_fade.fs");
+  cFadeShader = std::make_unique<Shader>("shaders/shader_fade.vs",
+                                         "shaders/shader_fade.fs");
   cFadeShader->use();
   cFadeShader->setFloat("increment", 0.0f);
 
@@ -192,10 +193,14 @@ Window2D::Window2D(int width, int height, GLFWwindow *windowPtr)
   float *tex1 = nullptr;
   float *tex2 = nullptr;
   CUDA_CHECK(cudaGraphicsMapResources(2, cudaPboResources, streams[0]));
-  CUDA_CHECK(cudaGraphicsResourceGetMappedPointer((void **)&tex1, nullptr, cudaPboResources[0]));
-  CUDA_CHECK(cudaGraphicsResourceGetMappedPointer((void **)&tex2, nullptr, cudaPboResources[1]));
-  computeJuliaCuda(width, height, c, zoomLevel, xOffset, yOffset, tex1, streams[0]);
-  computeJuliaCuda(width, height, c, zoomLevel, xOffset, yOffset, tex2, streams[0]);
+  CUDA_CHECK(cudaGraphicsResourceGetMappedPointer((void **)&tex1, nullptr,
+                                                  cudaPboResources[0]));
+  CUDA_CHECK(cudaGraphicsResourceGetMappedPointer((void **)&tex2, nullptr,
+                                                  cudaPboResources[1]));
+  computeJuliaCuda(width, height, c, zoomLevel, xOffset, yOffset, tex1,
+                   streams[0]);
+  computeJuliaCuda(width, height, c, zoomLevel, xOffset, yOffset, tex2,
+                   streams[0]);
   CUDA_CHECK(cudaGraphicsUnmapResources(2, cudaPboResources, streams[0]));
   CUDA_CHECK(cudaStreamSynchronize(streams[0]));
 
@@ -203,8 +208,7 @@ Window2D::Window2D(int width, int height, GLFWwindow *windowPtr)
   CUDA_CHECK(cudaMalloc(&dLabelImage, labelSize * labelSize * sizeof(float)));
 }
 
-Window2D::~Window2D()
-{
+Window2D::~Window2D() {
   CUDA_CHECK(cudaFreeHost(hCudaBuffers[0]));
   CUDA_CHECK(cudaFreeHost(hCudaBuffers[1]));
   CUDA_CHECK(cudaFree(dUpdateRelativeError));
@@ -217,44 +221,34 @@ Window2D::~Window2D()
   delete[] hLabelImage;
 }
 
-void Window2D::updateState()
-{
+void Window2D::updateState() {
   CUDA_CHECK(cudaStreamSynchronize(streams[(activeBuffer + 1) % 2]));
   updateTheta();
   updatePan();
   updateC();
 }
 
-void Window2D::redraw(bool switchTex)
-{
-  if (switchTex)
-  {
+void Window2D::redraw(bool switchTex) {
+  if (switchTex) {
     switchTexture(activeBuffer);
   }
   redrawImage();
-  if (needsRedraw)
-  {
+  if (needsRedraw) {
     needsRedraw = false;
     needsTextureSwitch = true;
-  }
-  else if (needsTextureSwitch)
-  {
+  } else if (needsTextureSwitch) {
     needsTextureSwitch = false;
   }
 }
 
-void Window2D::updatePrecision()
-{
+void Window2D::updatePrecision() {
   float minDim = std::min(width, height);
   float newZoom = zoomLevel * powf(1.1f, 5.0f) * minDim / cnn.imgSize;
 
-  if (newZoom < 300.0f)
-  {
+  if (newZoom < 300.0f) {
     singlePrecision = true;
     return;
-  }
-  else if (newZoom > 100000.0f)
-  {
+  } else if (newZoom > 100000.0f) {
     singlePrecision = false;
     return;
   }
@@ -270,7 +264,8 @@ void Window2D::updatePrecision()
   entries[1].fvalue = ((float)c.imag() - INPUT_MEANS[1]) / INPUT_STDS[1];
   entries[2].fvalue = ((float)xOffset - INPUT_MEANS[2]) / INPUT_STDS[2];
   entries[3].fvalue = ((float)yOffset - INPUT_MEANS[3]) / INPUT_STDS[3];
-  entries[4].fvalue = ((float)log(newZoom + 1.0) - INPUT_MEANS[4]) / INPUT_STDS[4];
+  entries[4].fvalue =
+      ((float)log(newZoom + 1.0) - INPUT_MEANS[4]) / INPUT_STDS[4];
   predict(entries.data(), 0, &result);
 
   // mlp pred
@@ -288,8 +283,7 @@ void Window2D::updatePrecision()
   singlePrecision = result >= 0.5f;
 }
 
-void Window2D::updatePan()
-{
+void Window2D::updatePan() {
   if (trackingMouse) // TODO: incorporate into mouse callback?
   {
     double xPos, yPos;
@@ -303,32 +297,27 @@ void Window2D::updatePan()
   }
 }
 
-void Window2D::updateTheta()
-{
-  if (!paused)
-  {
-    double thetaUpdate = 0.7 * lastThetaUpdate + std::min(0.001, exp(-*hUpdateRelativeError * 10000)) + 0.00001;
-    double gradientSize = sqrt(pow(sqrt(2.0) * cos(theta), 2.0) + pow(cos(theta), 2.0));
+void Window2D::updateTheta() {
+  if (!paused) {
+    double thetaUpdate = 0.7 * lastThetaUpdate +
+                         std::min(0.001, exp(-*hUpdateRelativeError * 10000)) +
+                         0.00001;
+    double gradientSize =
+        sqrt(pow(sqrt(2.0) * cos(theta), 2.0) + pow(cos(theta), 2.0));
     thetaUpdate = std::min(lastThetaUpdate * 2.0, thetaUpdate);
     lastThetaUpdate = thetaUpdate;
     incrementTheta(thetaUpdate / std::max(gradientSize, 0.1));
-    if (theta > 4.6 && thetaUpdate / std::max(gradientSize, 0.1) > 0.001)
-      std::cout << thetaUpdate / std::max(gradientSize, 0.1) << std::endl;
-    std::cout << theta << ", " << thetaUpdate << ", " << c.real() << ", " << c.imag() << std::endl;
-  }
-  else if (glfwGetKey(windowPtr, GLFW_KEY_LEFT) == GLFW_PRESS)
-  {
+  } else if (glfwGetKey(windowPtr, GLFW_KEY_COMMA) == GLFW_PRESS) {
     incrementTheta(-0.001 / zoomLevel);
-  }
-  else if (glfwGetKey(windowPtr, GLFW_KEY_RIGHT) == GLFW_PRESS)
-  {
+  } else if (glfwGetKey(windowPtr, GLFW_KEY_PERIOD) == GLFW_PRESS) {
     incrementTheta(0.001 / zoomLevel);
   }
-} 
+}
 
-void Window2D::incrementTheta(double increment)
-{
+void Window2D::incrementTheta(double increment) {
   theta += increment;
+  c.real(sin(sqrt(2.0) * theta) - 0.5);
+  c.imag(sin(theta));
   cFadeShader->use();
   cFadeShader->setFloat("increment", 1.0f - std::abs(increment) * 0.1);
   cPointShader->use();
@@ -336,16 +325,14 @@ void Window2D::incrementTheta(double increment)
   needsRedraw = true;
 }
 
-void Window2D::switchTexture(int index)
-{
+void Window2D::switchTexture(int index) {
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, texture);
   glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pboIds[index]);
   glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RED, GL_FLOAT, 0);
 }
 
-void Window2D::redrawImage()
-{
+void Window2D::redrawImage() {
   // draw julia set
   glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
 
@@ -366,7 +353,7 @@ void Window2D::redrawImage()
   cFadeShader->use();
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-  
+
   // add new c point
   cPointShader->use();
   glBindVertexArray(cVao);
@@ -376,9 +363,6 @@ void Window2D::redrawImage()
   // blit c plot to screen
   glBindFramebuffer(GL_READ_FRAMEBUFFER, cFbo);
   glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-  glBlitFramebuffer(
-    0, 0, cPlotSize, cPlotSize,
-    0, height - cPlotSize, cPlotSize, height,
-    GL_COLOR_BUFFER_BIT, GL_NEAREST
-  );
+  glBlitFramebuffer(0, 0, cPlotSize, cPlotSize, 0, height - cPlotSize,
+                    cPlotSize, height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
 }

@@ -15,71 +15,59 @@
 
 #ifdef WIN32
 #include <windows.h>
-extern "C"
-{
-  __declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
+extern "C" {
+__declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
 }
 #endif
 
 NppStreamContext ctx;
 
-void computeJulia(Window2D &window, Npp8u *nppBuffer)
-{
+void computeJulia(Window2D &window, Npp8u *nppBuffer) {
   int bufferIndex = window.getNextBufferIndex();
   cudaStream_t stream = window.streams[bufferIndex];
   float *dTargetTex = nullptr;
   float *dPrevTex = nullptr;
 
-  if (!window.paused)
-  {
+  if (!window.paused) {
     CUDA_CHECK(cudaGraphicsMapResources(2, window.cudaPboResources, stream));
     CUDA_CHECK(cudaGraphicsResourceGetMappedPointer(
-        (void **)&dPrevTex, nullptr, window.cudaPboResources[window.getBufferIndex()]));
-  }
-  else
-    CUDA_CHECK(cudaGraphicsMapResources(1, &window.cudaPboResources[bufferIndex], stream));
+        (void **)&dPrevTex, nullptr,
+        window.cudaPboResources[window.getBufferIndex()]));
+  } else
+    CUDA_CHECK(cudaGraphicsMapResources(
+        1, &window.cudaPboResources[bufferIndex], stream));
 
   CUDA_CHECK(cudaGraphicsResourceGetMappedPointer(
       (void **)&dTargetTex, nullptr, window.cudaPboResources[bufferIndex]));
 
   if (window.spSufficient())
-    computeJuliaCuda(window.width, window.height, window.c, window.zoomLevel, window.xOffset,
-                     window.yOffset, dTargetTex, stream);
-  else
-  {
-    computeJuliaAvx(window.width, window.height, window.c, window.zoomLevel, window.xOffset,
-                    window.yOffset, window.hCudaBuffers[bufferIndex]);
+    computeJuliaCuda(window.width, window.height, window.c, window.zoomLevel,
+                     window.xOffset, window.yOffset, dTargetTex, stream);
+  else {
+    computeJuliaAvx(window.width, window.height, window.c, window.zoomLevel,
+                    window.xOffset, window.yOffset,
+                    window.hCudaBuffers[bufferIndex]);
     CUDA_CHECK(cudaMemcpyAsync(dTargetTex, window.hCudaBuffers[bufferIndex],
                                window.width * window.height * sizeof(float),
                                cudaMemcpyHostToDevice, stream));
   }
 
-  if (!window.paused)
-  {
+  if (!window.paused) {
     ctx.hStream = stream;
     NPP_CHECK(nppiAverageRelativeError_32f_C1R_Ctx(
-        dTargetTex,
-        window.width * sizeof(float),
-        dPrevTex,
-        window.width * sizeof(float),
-        NppiSize{window.width, window.height},
-        window.dUpdateRelativeError,
-        nppBuffer,
-        ctx));
-    CUDA_CHECK(cudaMemcpyAsync(
-        window.hUpdateRelativeError,
-        window.dUpdateRelativeError,
-        sizeof(Npp64f),
-        cudaMemcpyDeviceToHost,
-        stream));
+        dTargetTex, window.width * sizeof(float), dPrevTex,
+        window.width * sizeof(float), NppiSize{window.width, window.height},
+        window.dUpdateRelativeError, nppBuffer, ctx));
+    CUDA_CHECK(cudaMemcpyAsync(window.hUpdateRelativeError,
+                               window.dUpdateRelativeError, sizeof(Npp64f),
+                               cudaMemcpyDeviceToHost, stream));
     CUDA_CHECK(cudaGraphicsUnmapResources(2, window.cudaPboResources, stream));
-  }
-  else
-    CUDA_CHECK(cudaGraphicsUnmapResources(1, &window.cudaPboResources[bufferIndex], stream));
+  } else
+    CUDA_CHECK(cudaGraphicsUnmapResources(
+        1, &window.cudaPboResources[bufferIndex], stream));
 }
 
-int main()
-{
+int main() {
   // init gl and window
   glfwInit();
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
@@ -96,8 +84,8 @@ int main()
   glfwWindowHint(GLFW_BLUE_BITS, mode->blueBits);
   glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
 
-  int width = mode->width * 0.75;
-  int height = mode->height * 0.75;
+  int width = mode->width;
+  int height = mode->height;
 
   // width and height must be multiple of 32 for avx kernel to work
   width = (width + 31) / 32 * 32;
@@ -117,23 +105,22 @@ int main()
   ctx.hStream = stream;
   NppiSize size{width, height};
   size_t nppMinMaxBufSize;
-  NPP_CHECK(nppiAverageRelativeErrorGetBufferHostSize_32f_C1R_Ctx(size, &nppMinMaxBufSize, ctx));
+  NPP_CHECK(nppiAverageRelativeErrorGetBufferHostSize_32f_C1R_Ctx(
+      size, &nppMinMaxBufSize, ctx));
   Npp8u *nppBuffer;
   CUDA_CHECK(cudaStreamSynchronize(stream));
   cudaStreamDestroy(stream);
   CUDA_CHECK(cudaMalloc(&nppBuffer, nppMinMaxBufSize));
 
   GLFWwindow *windowPtr;
-  windowPtr = glfwCreateWindow(width, height, "Julia", NULL, NULL);
-  if (windowPtr == NULL)
-  {
+  windowPtr = glfwCreateWindow(width, height, "Julia", primaryMonitor, NULL);
+  if (windowPtr == NULL) {
     std::cout << "Failed to create window" << std::endl;
     glfwTerminate();
   }
   glfwMakeContextCurrent(windowPtr);
 
-  if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
-  {
+  if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
     std::cout << "Failed to initialize GLAD" << std::endl;
   }
   Window2D window2d = Window2D(width, height, windowPtr);
@@ -141,35 +128,28 @@ int main()
   int frameCount = 0;
   auto clock = std::chrono::high_resolution_clock();
   auto start = clock.now();
-  while (!glfwWindowShouldClose(window2d.windowPtr))
-  {
+  while (!glfwWindowShouldClose(window2d.windowPtr)) {
     window2d.updateState();
 
-    if (window2d.needsRedraw)
-    {
+    if (window2d.needsRedraw) {
       window2d.switchBuffer();
       computeJulia(window2d, nppBuffer);
 
       window2d.redraw();
       window2d.swap();
-    }
-    else if (window2d.needsTextureSwitch)
-    {
+    } else if (window2d.needsTextureSwitch) {
       window2d.switchBuffer();
       window2d.redraw();
       window2d.switchBuffer();
       window2d.swap();
-    }
-    else
-    {
+    } else {
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
       --frameCount;
     }
 
     glfwPollEvents();
 
-    if (++frameCount == 6283)
-    {
+    if (++frameCount == 6283) {
       auto end = clock.now();
       std::chrono::duration<double> diff = end - start;
       std::cout << "fps: " << 6283 / diff.count() << std::endl;
