@@ -119,10 +119,10 @@ int main()
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
   glfwWindowHint(GLFW_SAMPLES, 16);
-  #ifndef NDEBUG
+#ifndef NDEBUG
   glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, true);
-  #endif
-  
+#endif
+
   GLFWmonitor *primaryMonitor = glfwGetPrimaryMonitor();
   const GLFWvidmode *mode = glfwGetVideoMode(primaryMonitor);
   glfwWindowHint(GLFW_RED_BITS, mode->redBits);
@@ -161,7 +161,6 @@ int main()
   CUDA_CHECK(cudaStreamSynchronize(stream));
   CUDA_CHECK(cudaStreamDestroy(stream));
   CUDA_CHECK(cudaMalloc(&nppBuffer, std::max(minMaxBufferSize, errorBufferSize)));
-
 
   GLFWwindow *windowPtr;
   windowPtr = glfwCreateWindow(width * 2, height, "Julia", primaryMonitor, NULL);

@@ -10,7 +10,8 @@
 #include "labeling.h"
 #include "window_2d.h"
 
-void labelImage(Window2D *window, bool sufficientPrecision) {
+void labelImage(Window2D *window, bool sufficientPrecision)
+{
   computeJuliaCuda(window->labelSize, window->labelSize, window->c,
                    window->zoomLevel, window->xOffset, window->yOffset,
                    window->dLabelImage, window->streams[0]);
@@ -31,7 +32,8 @@ void labelImage(Window2D *window, bool sufficientPrecision) {
   std::string filename = ss.str();
 
   std::ofstream file(filename, std::ios::binary | std::ofstream::trunc);
-  if (!file) {
+  if (!file)
+  {
     std::cerr << "Could not open file for writing." << std::endl;
     return;
   }
@@ -51,7 +53,8 @@ void labelImage(Window2D *window, bool sufficientPrecision) {
     csvName = std::string("../precision_labeling/insufficient2312.csv");
 
   std::ofstream csvFile(csvName, std::ios::app);
-  if (!csvFile) {
+  if (!csvFile)
+  {
     std::cerr << "Could not open csv file." << std::endl;
   }
   csvFile << filename << "," << window->c.real() << "," << window->c.imag()

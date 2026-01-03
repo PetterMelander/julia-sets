@@ -8,7 +8,6 @@
 #include <malloc.h>
 #include <sstream>
 #include <string>
-#include <corecrt.h>
 
 #include <stb_image_write.h>
 
@@ -18,17 +17,22 @@
 
 constexpr int width = 3840 * 2, height = 2160 * 2;
 
-static void mapColors(const float *buf, uint8_t *cbuf) {
+static void mapColors(const float *buf, uint8_t *cbuf)
+{
 #pragma omp parallel
 #pragma omp simd
-  for (int i = 0; i < width * height; ++i) {
+  for (int i = 0; i < width * height; ++i)
+  {
     float intensity = buf[i];
-    if (intensity < (float)MAX_ITERS) {
+    if (intensity < (float)MAX_ITERS)
+    {
       intensity = intensity * 0.05;
       cbuf[3 * i + 0] = (uint8_t)((sinf(intensity + 5.423) * 0.5 + 0.5) * 255);
       cbuf[3 * i + 1] = (uint8_t)((sinf(intensity + 4.359) * 0.5 + 0.5) * 255);
       cbuf[3 * i + 2] = (uint8_t)((sinf(intensity + 1.150) * 0.5 + 0.5) * 255);
-    } else {
+    }
+    else
+    {
       cbuf[3 * i + 0] = (uint8_t)0;
       cbuf[3 * i + 1] = (uint8_t)0;
       cbuf[3 * i + 2] = (uint8_t)0;
@@ -36,7 +40,8 @@ static void mapColors(const float *buf, uint8_t *cbuf) {
   }
 }
 
-void saveImage(Window2D *window) {
+void saveImage(Window2D *window)
+{
 
   float *buf = (float *)_mm_malloc(width * height * sizeof(float), 64);
   uint8_t *cbuf =

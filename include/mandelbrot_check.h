@@ -6,7 +6,7 @@ inline int mandelbrotConvergence(const std::complex<double> c)
 {
     constexpr int MAX_ITER = 10000000;
     constexpr double ESCAPE_THRESHOLD = 2.0;
-    
+
     const double cRe = c.real();
     const double cIm = c.imag();
 
@@ -22,7 +22,7 @@ inline int mandelbrotConvergence(const std::complex<double> c)
         {
             return i;
         }
-        
+
         double tmp = 2.0 * zRe * zIm;
         zRe = zRe * zRe - zIm * zIm + cRe;
         zIm = tmp + cIm;

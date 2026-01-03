@@ -9,7 +9,8 @@ constexpr double R_d = 2.0;
 constexpr int VEC_SIZE_SP = 16;
 constexpr int VEC_SIZE_DP = 8;
 
-inline __m512 pdToPs(const __m512d part1, const __m512d part2) {
+inline __m512 pdToPs(const __m512d part1, const __m512d part2)
+{
   __m256 lower = _mm512_cvtpd_ps(part1);
   __m256 upper = _mm512_cvtpd_ps(part2);
 
@@ -17,11 +18,13 @@ inline __m512 pdToPs(const __m512d part1, const __m512d part2) {
   return _mm512_insertf32x8(vec_lower, upper, 1);
 }
 
-struct QuadResult {
+struct QuadResult
+{
   __m512 data[2];
 };
 
-inline bool allBlack(QuadResult res) {
+inline bool allBlack(QuadResult res)
+{
   return _mm512_cmp_ps_mask(res.data[0], _mm512_set1_ps((float)MAX_ITERS),
                             _CMP_EQ_OQ) == 0xFFFF &&
          _mm512_cmp_ps_mask(res.data[1], _mm512_set1_ps((float)MAX_ITERS),
@@ -30,7 +33,8 @@ inline bool allBlack(QuadResult res) {
 
 template <bool doSmoothing>
 inline QuadResult evaluate(const __m512d zr[4], const __m512d zi[4],
-                           const __m512d cReal, const __m512d cImag) {
+                           const __m512d cReal, const __m512d cImag)
+{
   const __m512d R2 = _mm512_set1_pd(R_d * R_d);
   const __m512d ones = _mm512_set1_pd(1.0);
   const __m512 twosPs = _mm512_set1_ps(2.0f);
@@ -43,49 +47,30 @@ inline QuadResult evaluate(const __m512d zr[4], const __m512d zi[4],
   __m512d escapeAbs2[4];
 
   __m512d curIter = _mm512_setzero_pd();
-  for (int i = 0; i < MAX_ITERS; ++i) {
-
-    // if (active[k]) { \
-    //   __m512d zReal2 = _mm512_mul_pd(zReal[k], zReal[k]); \
-    //   __m512d zImag2 = _mm512_mul_pd(zImag[k], zImag[k]); \
-    //   __m512d zAbs2 = _mm512_add_pd(zReal2, zImag2); \
-    //                                                                              \
-    //   __mmask8 escaped = \
-    //       _mm512_mask_cmp_pd_mask(active[k], zAbs2, R2, _CMP_GE_OQ); \
-    //                                                                              \
-    //   escapeIter[k] = _mm512_mask_blend_pd(escaped, escapeIter[k], curIter);
-    //   \
-    //   if constexpr (doSmoothing) \
-    //     escapeAbs2[k] = _mm512_mask_blend_pd(escaped, escapeAbs2[k], zAbs2);
-    //     \
-    //                                                                              \
-    //   active[k] = active[k] & ~escaped; \
-    //                                                                              \
-    //   __m512d tmp = _mm512_add_pd(zReal[k], zReal[k]); \
-    //   zImag[k] = _mm512_fmadd_pd(tmp, zImag[k], cImag); \
-    //   zReal[k] = _mm512_add_pd(_mm512_sub_pd(zReal2, zImag2), cReal); \
-    // }
+  for (int i = 0; i < MAX_ITERS; ++i)
+  {
 
     // calc tmp component for zReal early to free register holding zImag2
-#define STEP(k)                                                                \
-  if (active[k]) {                                                             \
-    __m512d zImag2 = _mm512_mul_pd(zImag[k], zImag[k]);                        \
-    __m512d tmpRe = _mm512_sub_pd(cReal, zImag2);                              \
-                                                                               \
-    __m512d zAbs2 = _mm512_fmadd_pd(zReal[k], zReal[k], zImag2);               \
-    __mmask8 escaped =                                                         \
-        _mm512_mask_cmp_pd_mask(active[k], zAbs2, R2, _CMP_GE_OQ);             \
-                                                                               \
-    escapeIter[k] = _mm512_mask_blend_pd(escaped, escapeIter[k], curIter);     \
-    if constexpr (doSmoothing)                                                 \
-      escapeAbs2[k] = _mm512_mask_blend_pd(escaped, escapeAbs2[k], zAbs2);     \
-                                                                               \
-    active[k] = active[k] & ~escaped;                                          \
-                                                                               \
-    __m512d twoRe = _mm512_add_pd(zReal[k], zReal[k]);                         \
-    zImag[k] = _mm512_fmadd_pd(twoRe, zImag[k], cImag);                        \
-                                                                               \
-    zReal[k] = _mm512_fmadd_pd(zReal[k], zReal[k], tmpRe);                     \
+#define STEP(k)                                                            \
+  if (active[k])                                                           \
+  {                                                                        \
+    __m512d zImag2 = _mm512_mul_pd(zImag[k], zImag[k]);                    \
+    __m512d tmpRe = _mm512_sub_pd(cReal, zImag2);                          \
+                                                                           \
+    __m512d zAbs2 = _mm512_fmadd_pd(zReal[k], zReal[k], zImag2);           \
+    __mmask8 escaped =                                                     \
+        _mm512_mask_cmp_pd_mask(active[k], zAbs2, R2, _CMP_GE_OQ);         \
+                                                                           \
+    escapeIter[k] = _mm512_mask_blend_pd(escaped, escapeIter[k], curIter); \
+    if constexpr (doSmoothing)                                             \
+      escapeAbs2[k] = _mm512_mask_blend_pd(escaped, escapeAbs2[k], zAbs2); \
+                                                                           \
+    active[k] = active[k] & ~escaped;                                      \
+                                                                           \
+    __m512d twoRe = _mm512_add_pd(zReal[k], zReal[k]);                     \
+    zImag[k] = _mm512_fmadd_pd(twoRe, zImag[k], cImag);                    \
+                                                                           \
+    zReal[k] = _mm512_fmadd_pd(zReal[k], zReal[k], tmpRe);                 \
   }
 
     STEP(0);
@@ -103,18 +88,21 @@ inline QuadResult evaluate(const __m512d zr[4], const __m512d zi[4],
 
   QuadResult result;
 
-  if constexpr (!doSmoothing) {
+  if constexpr (!doSmoothing)
+  {
     result.data[0] = pdToPs(escapeIter[0], escapeIter[1]);
     result.data[1] = pdToPs(escapeIter[2], escapeIter[3]);
     return result;
   }
 
-  for (int i = 0; i < 2; ++i) {
+  for (int i = 0; i < 2; ++i)
+  {
     alignas(64) float temp[VEC_SIZE_SP];
     _mm512_store_ps(temp, pdToPs(escapeAbs2[2 * i], escapeAbs2[2 * i + 1]));
 
 #pragma omp simd
-    for (int j = 0; j < VEC_SIZE_SP; ++j) {
+    for (int j = 0; j < VEC_SIZE_SP; ++j)
+    {
       if (temp[j] > 1.0f)
         temp[j] = log2f(logf(temp[j]));
       else
@@ -131,14 +119,16 @@ inline QuadResult evaluate(const __m512d zr[4], const __m512d zi[4],
   return result;
 }
 
-__m512 evaluate(__m512 zReal, __m512 zImag, __m512 cReal, __m512 cImag) {
+__m512 evaluate(__m512 zReal, __m512 zImag, __m512 cReal, __m512 cImag)
+{
   const __m512 R2 = _mm512_set1_ps(R_s * R_s);
   __mmask16 active = 0xFFFF;
   __m512 escapeIter = _mm512_set1_ps(MAX_ITERS);
   __m512 escapeAbs2 = _mm512_set1_ps(0.0f);
   const __m512 twos = _mm512_set1_ps(2.0f);
 
-  for (int i = 0; i < MAX_ITERS; ++i) {
+  for (int i = 0; i < MAX_ITERS; ++i)
+  {
 
     // compute squared magnitude of z
     __m512 zReal2 = _mm512_mul_ps(zReal, zReal);
@@ -169,7 +159,8 @@ __m512 evaluate(__m512 zReal, __m512 zImag, __m512 cReal, __m512 cImag) {
   // it is not avx intrinsic
   alignas(64) float temp[VEC_SIZE_SP];
   _mm512_store_ps(temp, escapeAbs2);
-  for (int i = 0; i < VEC_SIZE_SP; ++i) {
+  for (int i = 0; i < VEC_SIZE_SP; ++i)
+  {
     temp[i] = log2f(logf(temp[i]));
   }
   __m512 smoothing = _mm512_load_ps(temp);
@@ -178,14 +169,16 @@ __m512 evaluate(__m512 zReal, __m512 zImag, __m512 cReal, __m512 cImag) {
   return escapeIter;
 }
 
-__m512d evaluate(__m512d zReal, __m512d zImag, __m512d cReal, __m512d cImag) {
+__m512d evaluate(__m512d zReal, __m512d zImag, __m512d cReal, __m512d cImag)
+{
   const __m512d R2 = _mm512_set1_pd(R_d * R_d);
   __mmask8 active = 0xFF;
   __m512d escapeIter = _mm512_set1_pd(MAX_ITERS);
   __m512d escapeAbs2 = _mm512_set1_pd(0.0);
   const __m512d twos = _mm512_set1_pd(2.0);
 
-  for (int i = 0; i < MAX_ITERS; ++i) {
+  for (int i = 0; i < MAX_ITERS; ++i)
+  {
 
     // compute squared magnitude of z
     __m512d zReal2 = _mm512_mul_pd(zReal, zReal);
@@ -216,7 +209,8 @@ __m512d evaluate(__m512d zReal, __m512d zImag, __m512d cReal, __m512d cImag) {
   // it is not avx intrinsic
   alignas(64) double temp[VEC_SIZE_DP];
   _mm512_store_pd(temp, escapeAbs2);
-  for (int i = 0; i < VEC_SIZE_DP; ++i) {
+  for (int i = 0; i < VEC_SIZE_DP; ++i)
+  {
     temp[i] = log2(log(temp[i]));
   }
   __m512d smoothing = _mm512_load_pd(temp);
@@ -227,7 +221,8 @@ __m512d evaluate(__m512d zReal, __m512d zImag, __m512d cReal, __m512d cImag) {
 
 void juliaKernelAvx(float *intensities, float planeTopLeftX,
                     float planeTopLeftY, float pixelStepX, float pixelStepY,
-                    float cReal, double cImag, int width, int height) {
+                    float cReal, double cImag, int width, int height)
+{
 
   // vectorize c
   __m512 cRealVec = _mm512_set1_ps(cReal);
@@ -240,12 +235,14 @@ void juliaKernelAvx(float *intensities, float planeTopLeftX,
   __m512 indexVec = _mm512_cvtepi32_ps(indexIvec);
 
 #pragma omp parallel for schedule(dynamic)
-  for (int y = 0; y < height; ++y) {
+  for (int y = 0; y < height; ++y)
+  {
     // vectorize imaginary part (const across vector)
     float im = planeTopLeftY + y * pixelStepY;
     __m512 zImagVec = _mm512_set1_ps(im);
 
-    for (int x = 0; x < width; x += VEC_SIZE_SP) {
+    for (int x = 0; x < width; x += VEC_SIZE_SP)
+    {
       // vectorize real part (16 consecutive pixels in a row)
       float re = planeTopLeftX + x * pixelStepX;
       __m512 zRealVec = _mm512_set1_ps(re);
@@ -260,7 +257,8 @@ void juliaKernelAvx(float *intensities, float planeTopLeftX,
 
 void juliaKernelAvx(float *intensities, double planeTopLeftX,
                     double planeTopLeftY, double pixelStepX, double pixelStepY,
-                    double cReal, double cImag, int width, int height) {
+                    double cReal, double cImag, int width, int height)
+{
   constexpr int BOX_SIZE = 32;
 
   const __m512d cRealVec = _mm512_set1_pd(cReal);
@@ -275,14 +273,17 @@ void juliaKernelAvx(float *intensities, double planeTopLeftX,
       _mm512_set1_pd(16.0 * pixelStepX), _mm512_set1_pd(24.0 * pixelStepX)};
 
 #pragma omp parallel for schedule(dynamic, 1)
-  for (int y = 0; y < height; y += BOX_SIZE) {
-    for (int x = 0; x < width; x += BOX_SIZE) {
+  for (int y = 0; y < height; y += BOX_SIZE)
+  {
+    for (int x = 0; x < width; x += BOX_SIZE)
+    {
       __m512d zrBase[4], ziBase[4];
       double baseRe = planeTopLeftX + x * pixelStepX;
       __m512d baseReVec =
           _mm512_fmadd_pd(indexVec, pixelStepVecX, _mm512_set1_pd(baseRe));
 
-      for (int k = 0; k < 4; ++k) {
+      for (int k = 0; k < 4; ++k)
+      {
         zrBase[k] = _mm512_add_pd(baseReVec, xOffsets[k]);
       }
 
@@ -294,7 +295,8 @@ void juliaKernelAvx(float *intensities, double planeTopLeftX,
       QuadResult resTop = evaluate<true>(zrBase, ziBase, cRealVec, cImagVec);
 
       // store top row
-      for (int k = 0; k < 2; ++k) {
+      for (int k = 0; k < 2; ++k)
+      {
         _mm512_stream_ps(intensities + y * width + (x + k * VEC_SIZE_SP),
                          resTop.data[k]);
       }
@@ -307,7 +309,8 @@ void juliaKernelAvx(float *intensities, double planeTopLeftX,
       QuadResult resBot = evaluate<true>(zrBase, ziBase, cRealVec, cImagVec);
 
       // store bottom row
-      for (int k = 0; k < 2; ++k) {
+      for (int k = 0; k < 2; ++k)
+      {
         _mm512_stream_ps(intensities + (y + BOX_SIZE - 1) * width +
                              (x + k * VEC_SIZE_SP),
                          resBot.data[k]);
@@ -316,7 +319,8 @@ void juliaKernelAvx(float *intensities, double planeTopLeftX,
       bool boxIsBlack = allBlack(resTop) && allBlack(resBot);
 
       // process sides (if top/bottom were black)
-      if (boxIsBlack) {
+      if (boxIsBlack)
+      {
         __m512d zrLeft[4], zrRight[4], ziVert[4];
 
         double baseX = planeTopLeftX + x * pixelStepX;
@@ -326,7 +330,8 @@ void juliaKernelAvx(float *intensities, double planeTopLeftX,
         __m512d baseYVec =
             _mm512_fmadd_pd(indexVec, pixelStepVecY, _mm512_set1_pd(baseY));
 
-        for (int k = 0; k < 4; ++k) {
+        for (int k = 0; k < 4; ++k)
+        {
           zrLeft[k] = _mm512_set1_pd(baseX);
           zrRight[k] = _mm512_set1_pd(rightX);
           __m512d yOff = _mm512_set1_pd((k * 8) * pixelStepY);
@@ -340,7 +345,8 @@ void juliaKernelAvx(float *intensities, double planeTopLeftX,
           boxIsBlack = false;
 
         // check right (only if still black)
-        if (boxIsBlack) {
+        if (boxIsBlack)
+        {
           QuadResult resRight =
               evaluate<false>(zrRight, ziVert, cRealVec, cImagVec);
           if (!allBlack(resRight))
@@ -348,18 +354,24 @@ void juliaKernelAvx(float *intensities, double planeTopLeftX,
         }
       }
 
-      // fill interior
-      if (boxIsBlack) {
+      if (boxIsBlack)
+      {
+        // fill interior
         __m512 blackVec = _mm512_set1_ps((float)MAX_ITERS);
-        for (int k = 1; k < BOX_SIZE - 1; ++k) {
-          for (int j = 0; j < BOX_SIZE / VEC_SIZE_SP; ++j) {
+        for (int k = 1; k < BOX_SIZE - 1; ++k)
+        {
+          for (int j = 0; j < BOX_SIZE / VEC_SIZE_SP; ++j)
+          {
             _mm512_stream_ps(
                 intensities + (y + k) * width + x + j * VEC_SIZE_SP, blackVec);
           }
         }
-      } else {
+      }
+      else
+      {
         // compute interior manually
-        for (int k = 1; k < BOX_SIZE - 1; ++k) {
+        for (int k = 1; k < BOX_SIZE - 1; ++k)
+        {
           double im = planeTopLeftY + (y + k) * pixelStepY;
           for (int v = 0; v < 4; ++v)
             ziBase[v] = _mm512_set1_pd(im);
@@ -367,7 +379,8 @@ void juliaKernelAvx(float *intensities, double planeTopLeftX,
           QuadResult rowRes =
               evaluate<true>(zrBase, ziBase, cRealVec, cImagVec);
 
-          for (int v = 0; v < 2; ++v) {
+          for (int v = 0; v < 2; ++v)
+          {
             _mm512_stream_ps(intensities + (y + k) * width + x +
                                  v * VEC_SIZE_SP,
                              rowRes.data[v]);
@@ -380,7 +393,8 @@ void juliaKernelAvx(float *intensities, double planeTopLeftX,
 
 void computeJuliaAvx(int width, int height, std::complex<double> c,
                      double zoomLevel, double xOffset, double yOffset,
-                     float *buffer) {
+                     float *buffer)
+{
 
   int minDim = std::min(width, height);
   double viewWidth = 2.0 * ((double)width / (minDim * zoomLevel));

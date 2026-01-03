@@ -47,7 +47,8 @@ __device__ float evaluate(float2 z, const float2 c)
 
 template <bool symmetric>
 __global__ void juliaKernelCuda(float *const __restrict__ buffer, const float2 planeTopLeft,
-                      const float2 pixelStep, const float2 c, const int width, const int height)
+                                const float2 pixelStep, const float2 c,
+                                const int width, const int height)
 {
   int xIdx = blockIdx.x * blockDim.x + threadIdx.x;
   int yIdx = blockIdx.y * blockDim.y + threadIdx.y;
@@ -66,8 +67,8 @@ __global__ void juliaKernelCuda(float *const __restrict__ buffer, const float2 p
 }
 
 void computeJuliaCuda(int width, int height, std::complex<double> c, double zoomLevel,
-  double xOffset, double yOffset, float *buffer, cudaStream_t stream)
-  {
+                      double xOffset, double yOffset, float *buffer, cudaStream_t stream)
+{
   constexpr int BLOCK_SIZE = 16;
 
   float2 C = make_float2(c.real(), c.imag());

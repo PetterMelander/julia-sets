@@ -27,7 +27,7 @@ Window3D::Window3D(int width, int height, GLFWwindow *windowPtr)
   int minDim = std::min(width, height);
   double xStep = 2.0 * ((double)width / minDim) / (double)(width - 1);
   double yStep = 2.0 * ((double)height / minDim) / (double)(height - 1);
-  #pragma omp parallel for
+#pragma omp parallel for
   for (int y = 0; y < height; ++y)
   {
     for (int x = 0; x < width; ++x)
@@ -131,9 +131,9 @@ Window3D::Window3D(int width, int height, GLFWwindow *windowPtr)
   depthShader->setMat4("lightSpaceMatrix", lightSpaceMatrix);
   depthShader->setInt("heightMap", 1);
   if (width > height)
-    depthShader->setVec2("texStretching", glm::vec2((float)height/(float)width, 1.0));
+    depthShader->setVec2("texStretching", glm::vec2((float)height / (float)width, 1.0));
   else
-    depthShader->setVec2("texStretching", glm::vec2(1.0, (float)width/(float)height));
+    depthShader->setVec2("texStretching", glm::vec2(1.0, (float)width / (float)height));
 
   // set window parameters and callbacks
   glEnable(GL_DEPTH_TEST);
@@ -145,9 +145,9 @@ Window3D::Window3D(int width, int height, GLFWwindow *windowPtr)
   shader->use();
   shader->setInt("heightMap", 1);
   if (width > height)
-    shader->setVec2("texStretching", glm::vec2((float)height/(float)width, 1.0));
+    shader->setVec2("texStretching", glm::vec2((float)height / (float)width, 1.0));
   else
-    shader->setVec2("texStretching", glm::vec2(1.0, (float)width/(float)height));
+    shader->setVec2("texStretching", glm::vec2(1.0, (float)width / (float)height));
   shader->setFloat("xstep", 2.0f * ((float)width / minDim) / (float)(width - 1));
   shader->setFloat("ystep", 2.0f * ((float)height / minDim) / (float)(height - 1));
   shader->setVec3("viewPos", camera.front);
