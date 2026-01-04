@@ -69,7 +69,7 @@ __global__ void juliaKernelCuda(float *const __restrict__ buffer, const float2 p
 void computeJuliaCuda(int width, int height, std::complex<double> c, double zoomLevel,
                       double xOffset, double yOffset, float *buffer, cudaStream_t stream)
 {
-  constexpr int BLOCK_SIZE = 16;
+  constexpr int BLOCK_SIZE = 8;
 
   float2 C = make_float2(c.real(), c.imag());
 

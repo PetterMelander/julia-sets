@@ -49,7 +49,7 @@ void computeJulia(Window2D &window, Npp8u *nppBuffer)
                      window.xOffset, window.yOffset, dTargetTex, stream);
   else
   {
-    computeJuliaAvx(window.width, window.height, window.c, window.zoomLevel,
+    computeJuliaAvx(window.width, window.height, false, window.c, window.zoomLevel,
                     window.xOffset, window.yOffset,
                     window.hCudaBuffers[bufferIndex]);
     CUDA_CHECK(cudaMemcpyAsync(dTargetTex, window.hCudaBuffers[bufferIndex],

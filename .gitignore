@@ -4,6 +4,7 @@ release
 debug
 out
 vendor
+saved_imgs/
 
 # Prerequisites
 *.d

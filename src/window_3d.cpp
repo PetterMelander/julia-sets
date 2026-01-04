@@ -100,6 +100,7 @@ Window3D::Window3D(int width, int height, GLFWwindow *windowPtr)
     glEnableVertexAttribArray(1);
   }
 
+  glActiveTexture(GL_TEXTURE2);
   glGenTextures(1, &heightMap);
   glBindTexture(GL_TEXTURE_2D, heightMap);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -109,6 +110,7 @@ Window3D::Window3D(int width, int height, GLFWwindow *windowPtr)
   // set up resources for shadows
   glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
   glGenFramebuffers(1, &depthMapFBO);
+  glActiveTexture(GL_TEXTURE3);
   glGenTextures(1, &depthMap);
   glBindTexture(GL_TEXTURE_2D, depthMap);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT16, SHADOW_WIDTH, SHADOW_HEIGHT, 0,
@@ -129,7 +131,7 @@ Window3D::Window3D(int width, int height, GLFWwindow *windowPtr)
   depthShader = std::make_unique<Shader>("shaders/shader_3d_shadow.vs", "shaders/shader_3d_shadow.fs");
   depthShader->use();
   depthShader->setMat4("lightSpaceMatrix", lightSpaceMatrix);
-  depthShader->setInt("heightMap", 1);
+  depthShader->setInt("heightMap", 2);
   if (width > height)
     depthShader->setVec2("texStretching", glm::vec2((float)height / (float)width, 1.0));
   else
@@ -138,12 +140,11 @@ Window3D::Window3D(int width, int height, GLFWwindow *windowPtr)
   // set window parameters and callbacks
   glEnable(GL_DEPTH_TEST);
   glEnable(GL_CULL_FACE);
-  // glEnable(GL_FRAMEBUFFER_SRGB);
 
   // init shader
   shader = std::make_unique<Shader>("shaders/shader_3d.vs", "shaders/shader_3d.fs");
   shader->use();
-  shader->setInt("heightMap", 1);
+  shader->setInt("heightMap", 2);
   if (width > height)
     shader->setVec2("texStretching", glm::vec2((float)height / (float)width, 1.0));
   else
@@ -152,7 +153,7 @@ Window3D::Window3D(int width, int height, GLFWwindow *windowPtr)
   shader->setFloat("ystep", 2.0f * ((float)height / minDim) / (float)(height - 1));
   shader->setVec3("viewPos", camera.front);
   shader->setMat4("lightSpaceMatrix", lightSpaceMatrix);
-  shader->setInt("shadowMap", 2);
+  shader->setInt("shadowMap", 3);
   for (unsigned int i = 0; i < aoNumSamples; ++i)
   {
     shader->setVec2("aoSamples[" + std::to_string(i) + "]", aoKernel[i]);
@@ -161,10 +162,8 @@ Window3D::Window3D(int width, int height, GLFWwindow *windowPtr)
 
 void Window3D::switchTexture(int index)
 {
-  glActiveTexture(GL_TEXTURE1);
-  glBindTexture(GL_TEXTURE_2D, heightMap);
   glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pboIds[index]);
-  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RED, GL_FLOAT, 0);
+  glTextureSubImage2D(heightMap, 0, 0, 0, width, height, GL_RED, GL_FLOAT, 0);
 }
 
 void Window3D::redrawImage(int index, bool depthPass)
@@ -172,9 +171,6 @@ void Window3D::redrawImage(int index, bool depthPass)
   if (depthPass)
   {
     depthShader->use();
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, heightMap);
-
     glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
     glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
     glClear(GL_DEPTH_BUFFER_BIT);
@@ -188,17 +184,10 @@ void Window3D::redrawImage(int index, bool depthPass)
   glEnable(GL_MULTISAMPLE);
 
   shader->use();
-
-  glActiveTexture(GL_TEXTURE1);
-  glBindTexture(GL_TEXTURE_2D, heightMap);
-  glActiveTexture(GL_TEXTURE2);
-  glBindTexture(GL_TEXTURE_2D, depthMap);
-
   glBindVertexArray(vaoIds[index]);
   glDrawElements(GL_TRIANGLES, 3 * 2 * (height - 1) * (width - 1), GL_UNSIGNED_INT, 0);
 
   glDisable(GL_MULTISAMPLE);
-
   needsRedraw = false;
 }
 

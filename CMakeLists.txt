@@ -52,7 +52,7 @@ else()
     set(NPP_LIBS CUDA::nppif_static CUDA::nppist_static CUDA::nppc_static)
 endif()
 
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O3 --use_fast_math --extra-device-vectorization --ptxas-options=-O3 -lineinfo")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O3 --use_fast_math --extra-device-vectorization --ptxas-options=-O3")
 set(CMAKE_CUDA_STANDARD 17)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 set(CMAKE_CUDA_ARCHITECTURES 75 89-real 89-virtual)
@@ -98,7 +98,7 @@ macro(setup_executable name)
     target_link_libraries(${name} PRIVATE julia_lib)
     set_property(TARGET ${name} PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
 
-    # 1. Copy Shaders
+    # 1. copy shaders
     add_custom_command(TARGET ${name} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_CURRENT_SOURCE_DIR}/src/shaders
@@ -106,7 +106,15 @@ macro(setup_executable name)
         COMMENT "Copying shaders..."
     )
     
-    # 2. Copy ONNX Model
+    # 2. copy Mandelbrot image
+    add_custom_command(TARGET ${name} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${CMAKE_CURRENT_SOURCE_DIR}/mandelbrot_boundary.png
+            $<TARGET_FILE_DIR:${name}>/mandelbrot_boundary.png
+        COMMENT "Copying mandelbrot png..."
+    )
+
+    # 3. copy ONNX model
     add_custom_command(TARGET ${name} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             ${CMAKE_CURRENT_SOURCE_DIR}/precision_labeling/cnn.onnx
@@ -115,7 +123,7 @@ macro(setup_executable name)
     )
 
     if(WIN32)
-        # 3. Copy vcpkg/System DLLs (Generic)
+        # 4. copy vcpkg/system DLLs
         add_custom_command(TARGET ${name} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
             $<TARGET_RUNTIME_DLLS:${name}>
@@ -124,7 +132,7 @@ macro(setup_executable name)
             COMMENT "Copying runtime DLLs..."
         )
 
-        # 4. Copy NPP DLLs
+        # 5. copy NPP DLLs
         if(CUDAToolkit_FOUND)
             file(GLOB NPP_DLLS 
                 "${CUDAToolkit_BIN_DIR}/x64/nppif64_*.dll"
@@ -142,7 +150,7 @@ macro(setup_executable name)
             endif()
         endif()
 
-        # 5. Copy TensorRT DLLs
+        # 6. copy TensorRT DLLs
         if(TENSORRT_ROOT)
             add_custom_command(TARGET ${name} POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different

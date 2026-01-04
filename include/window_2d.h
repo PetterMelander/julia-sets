@@ -37,8 +37,9 @@ public:
 
   int width;
   int height;
+  bool cinematicMode = true;
 
-  double zoomLevel = 0.5;
+  double zoomLevel = 0.75;
   double xOffset = 0.0;
   double yOffset = 0.0;
 
@@ -77,7 +78,7 @@ public:
 
 private:
   GLuint pboIds[2];
-  GLuint texture;
+  GLuint juliaTex;
   GLuint vao;
   GLuint vbo;
   std::unique_ptr<Shader> shader;
@@ -86,14 +87,16 @@ private:
   GLuint cTex;
   GLuint cVao;
   GLuint cVbo;
+  GLuint mandelbrotTex;
   std::unique_ptr<Shader> cPointShader;
   std::unique_ptr<Shader> cFadeShader;
+  std::unique_ptr<Shader> cBackgroundShader;
 
   static constexpr double R = 1.7320508075688772; // sqrt(3)
   static constexpr double r = 2.2;
   static constexpr double d = 0.3;
   static constexpr double length = 0.7885;
-  static constexpr int cPlotSize = 240;
+  static constexpr int cPlotSize = 256;
 
   double lastThetaUpdate = 0.001;
   bool singlePrecision = true;
@@ -126,7 +129,7 @@ private:
       }
     }
     glBindBuffer(GL_ARRAY_BUFFER, cVbo);
-    float tmp[] = {(float)c.real() + 0.5f, (float)c.imag()};
+    float tmp[] = {((float)c.real() + 0.7f) / 1.2f, (float)c.imag() / 1.2f};
     glBufferData(GL_ARRAY_BUFFER, 2 * sizeof(float), tmp, GL_DYNAMIC_DRAW);
   }
 

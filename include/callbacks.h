@@ -108,4 +108,11 @@ inline void keyCallback(GLFWwindow *window, int key, int scancode, int action,
         static_cast<Window2D *>(glfwGetWindowUserPointer(window));
     saveImage(window2d);
   }
+  if (key == GLFW_KEY_F11 && action == GLFW_PRESS)
+  {
+    Window2D *window2d =
+        static_cast<Window2D *>(glfwGetWindowUserPointer(window));
+    window2d->cinematicMode = !window2d->cinematicMode;
+    window2d->needsRedraw = true;
+  }
 }

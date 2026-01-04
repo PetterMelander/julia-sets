@@ -24,7 +24,7 @@ static void mapColors(const float *buf, uint8_t *cbuf)
   for (int i = 0; i < width * height; ++i)
   {
     float intensity = buf[i];
-    if (intensity < (float)MAX_ITERS)
+    if (intensity < 1000000.0f)
     {
       intensity = intensity * 0.05;
       cbuf[3 * i + 0] = (uint8_t)((sinf(intensity + 5.423) * 0.5 + 0.5) * 255);
@@ -46,7 +46,7 @@ void saveImage(Window2D *window)
   float *buf = (float *)_mm_malloc(width * height * sizeof(float), 64);
   uint8_t *cbuf =
       (uint8_t *)_mm_malloc(width * height * 3 * sizeof(uint8_t), 64);
-  computeJuliaAvx(width, height, window->c, window->zoomLevel, window->xOffset,
+  computeJuliaAvx(width, height, true, window->c, window->zoomLevel, window->xOffset,
                   window->yOffset, buf);
   mapColors(buf, cbuf);
 

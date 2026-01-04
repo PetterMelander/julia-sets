@@ -66,7 +66,7 @@ void computeJulia(Window2D &window2D, Window3D &window3D,
                      window2D.xOffset, window2D.yOffset, dTargetTex2D, stream);
   else
   {
-    computeJuliaAvx(window2D.width, window2D.height, window2D.c, window2D.zoomLevel,
+    computeJuliaAvx(window2D.width, window2D.height, false, window2D.c, window2D.zoomLevel,
                     window2D.xOffset, window2D.yOffset, window2D.hCudaBuffers[bufferIndex]);
     CUDA_CHECK(cudaMemcpyAsync(dTargetTex2D, window2D.hCudaBuffers[bufferIndex],
                                window2D.width * window2D.height * sizeof(float),

@@ -1,9 +1,12 @@
+#define STB_IMAGE_IMPLEMENTATION
+
 #include <cmath>
 #include <iostream>
 #include <memory>
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
+#include <stb_image.h>
 
 #include <cuda_gl_interop.h>
 #include <cuda_runtime.h>
@@ -103,13 +106,15 @@ Window2D::Window2D(int width, int height, GLFWwindow *windowPtr)
 #endif
 
   // allocate buffers, texture, etc.
+  // avx kernel requires dimensions to be multiples of box size. usually not a problem for width
   int dSize = width * height * sizeof(float);
+  int allocSize = width * ((height + 31) / 32) * 32 * sizeof(float);
   glGenBuffers(2, pboIds);
   for (int i = 0; i < 2; ++i)
   {
     CUDA_CHECK(cudaStreamCreate(&streams[i]));
 
-    CUDA_CHECK(cudaMallocHost(&hCudaBuffers[i], dSize));
+    CUDA_CHECK(cudaMallocHost(&hCudaBuffers[i], allocSize));
 
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pboIds[i]);
     glBufferData(GL_PIXEL_UNPACK_BUFFER, dSize, 0, GL_DYNAMIC_DRAW);
@@ -118,8 +123,9 @@ Window2D::Window2D(int width, int height, GLFWwindow *windowPtr)
                                             cudaGraphicsMapFlagsNone));
   }
 
-  glGenTextures(1, &texture);
-  glBindTexture(GL_TEXTURE_2D, texture);
+  glActiveTexture(GL_TEXTURE0);
+  glGenTextures(1, &juliaTex);
+  glBindTexture(GL_TEXTURE_2D, juliaTex);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, width, height, 0, GL_RED, GL_FLOAT,
@@ -159,6 +165,7 @@ Window2D::Window2D(int width, int height, GLFWwindow *windowPtr)
 
   glGenFramebuffers(1, &cFbo);
   glBindFramebuffer(GL_FRAMEBUFFER, cFbo);
+  glActiveTexture(GL_TEXTURE15);
   glGenTextures(1, &cTex);
   glBindTexture(GL_TEXTURE_2D, cTex);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, cPlotSize, cPlotSize, 0, GL_RGBA,
@@ -176,10 +183,21 @@ Window2D::Window2D(int width, int height, GLFWwindow *windowPtr)
   glBufferData(GL_ARRAY_BUFFER, 2 * sizeof(float), NULL, GL_DYNAMIC_DRAW);
   glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void *)0);
   glEnableVertexAttribArray(0);
-  glPointSize(2.5f);
+  glPointSize(1.5f);
+
+  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+  int x, y, n;
+  unsigned char *mandelbrotData = stbi_load("mandelbrot_boundary.png", &x, &y, &n, 0);
+  glActiveTexture(GL_TEXTURE1);
+  glGenTextures(1, &mandelbrotTex);
+  glBindTexture(GL_TEXTURE_2D, mandelbrotTex);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, x, y, 0, GL_RED, GL_UNSIGNED_BYTE, mandelbrotData);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  stbi_image_free(mandelbrotData);
 
   // set window parameters and callbacks
-  glfwSwapInterval(0);
+  glfwSwapInterval(1);
   glfwSetWindowUserPointer(windowPtr, this);
 
   glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -203,6 +221,11 @@ Window2D::Window2D(int width, int height, GLFWwindow *windowPtr)
                                          "shaders/shader_fade.fs");
   cFadeShader->use();
   cFadeShader->setFloat("increment", 0.0f);
+
+  cBackgroundShader = std::make_unique<Shader>("shaders/shader_bg.vs",
+                                               "shaders/shader_bg.fs");
+  cBackgroundShader->use();
+  cBackgroundShader->setInt("mandelbrot", 1);
 
   // init Npp vars
   CUDA_CHECK(cudaMalloc(&dUpdateRelativeError, sizeof(Npp64f)));
@@ -354,10 +377,10 @@ void Window2D::updateTheta()
 void Window2D::incrementTheta(double increment)
 {
   theta += increment;
-  c.real(sin(sqrt(2.0) * theta) - 0.5);
-  c.imag(sin(theta));
+  c.real(1.2 * sin(sqrt(2.0) * theta) - 0.7);
+  c.imag(1.2 * sin(theta));
   cFadeShader->use();
-  cFadeShader->setFloat("increment", 1.0f - std::abs(increment) * 0.1);
+  cFadeShader->setFloat("increment", 1.0f - std::abs(increment) * 0.001);
   cPointShader->use();
   cPointShader->setFloat("speed", 1.0f - std::abs(increment) * 200);
   needsRedraw = true;
@@ -365,44 +388,46 @@ void Window2D::incrementTheta(double increment)
 
 void Window2D::switchTexture(int index)
 {
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, texture);
   glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pboIds[index]);
-  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RED, GL_FLOAT, 0);
+  glTextureSubImage2D(juliaTex, 0, 0, 0, width, height, GL_RED, GL_FLOAT, 0);
 }
 
 void Window2D::redrawImage()
 {
-  // draw julia set
   glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
-
+  
+  // draw julia set
   glViewport(0, 0, width, height);
   shader->use();
-
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, texture);
-
   glBindVertexArray(vao);
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
-  // fade c plot
-  glViewport(0, 0, cPlotSize, cPlotSize);
-  glBindFramebuffer(GL_READ_FRAMEBUFFER, cFbo);
-  glBindFramebuffer(GL_DRAW_FRAMEBUFFER, cFbo);
-  glEnable(GL_BLEND);
-  glBlendFunc(GL_ZERO, GL_SRC_ALPHA);
-  cFadeShader->use();
-  glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  if (!cinematicMode)
+  {
+    // fade c plot
+    glViewport(0, 0, cPlotSize, cPlotSize);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, cFbo);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, cFbo);
+    glEnable(GL_BLEND);
+    glBlendFuncSeparate(GL_ZERO, GL_ONE, GL_ZERO, GL_SRC_ALPHA);
+    cFadeShader->use();
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
-  // add new c point
-  cPointShader->use();
-  glBindVertexArray(cVao);
-  glDrawArrays(GL_POINTS, 0, 1);
-  glDisable(GL_BLEND);
+    // blend with background
+    glBlendFunc(GL_ONE_MINUS_DST_ALPHA, GL_DST_ALPHA);
+    cBackgroundShader->use();
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
-  // blit c plot to screen
-  glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-  glBlitFramebuffer(0, 0, cPlotSize, cPlotSize, 0, height - cPlotSize,
-                    cPlotSize, height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    // add new c point
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    cPointShader->use();
+    glBindVertexArray(cVao);
+    glDrawArrays(GL_POINTS, 0, 1);
+    glDisable(GL_BLEND);
+
+    // blit c plot to screen
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+    glBlitFramebuffer(0, 0, cPlotSize, cPlotSize, 0, height - cPlotSize,
+                      cPlotSize, height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+  }
 }
