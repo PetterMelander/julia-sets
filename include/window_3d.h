@@ -75,75 +75,9 @@ private:
   const glm::mat4 lightSpaceMatrix = lightProjection * lightView;
   std::unique_ptr<Shader> depthShader;
 
-  void switchTexture(int index)
-  {
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, heightMap);
-    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pboIds[index]);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RED, GL_FLOAT, 0);
-  }
+  void switchTexture(int index);
 
-  void redrawImage(int index, bool depthPass = true)
-  {
+  void redrawImage(int index, bool depthPass = true);
 
-    if (depthPass)
-    {
-      depthShader->use();
-      glActiveTexture(GL_TEXTURE1);
-      glBindTexture(GL_TEXTURE_2D, heightMap);
-
-      glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
-      glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
-      glClear(GL_DEPTH_BUFFER_BIT);
-      glBindVertexArray(vaoIds[index]);
-      glDrawElements(GL_TRIANGLES, 3 * 2 * (height - 1) * (width - 1), GL_UNSIGNED_INT, 0);
-      glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    }
-
-    // main pass
-    glViewport(width, 0, width, height);
-    glEnable(GL_MULTISAMPLE);
-
-    shader->use();
-
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, heightMap);
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, depthMap);
-
-    glBindVertexArray(vaoIds[index]);
-    glDrawElements(GL_TRIANGLES, 3 * 2 * (height - 1) * (width - 1), GL_UNSIGNED_INT, 0);
-
-    glDisable(GL_MULTISAMPLE);
-
-    needsRedraw = false;
-  }
-
-  void processMovement(float deltaTime)
-  {
-    if (glfwGetKey(windowPtr, GLFW_KEY_W) == GLFW_PRESS)
-    {
-      camera.ProcessKeyboard(FORWARD, deltaTime);
-      shader->setVec3("viewPos", camera.front);
-      needsRedraw = true;
-    }
-    if (glfwGetKey(windowPtr, GLFW_KEY_S) == GLFW_PRESS)
-    {
-      camera.ProcessKeyboard(BACKWARD, deltaTime);
-      shader->setVec3("viewPos", camera.front);
-      needsRedraw = true;
-    }
-    if (glfwGetKey(windowPtr, GLFW_KEY_A) == GLFW_PRESS)
-    {
-      camera.ProcessKeyboard(LEFT, deltaTime);
-      shader->setVec3("viewPos", camera.front);
-      needsRedraw = true;
-    }
-    if (glfwGetKey(windowPtr, GLFW_KEY_D) == GLFW_PRESS)
-    {
-      camera.ProcessKeyboard(RIGHT, deltaTime);
-      shader->setVec3("viewPos", camera.front);
-      needsRedraw = true;
-    }
-  }
+  void processMovement(float deltaTime);
 };

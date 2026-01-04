@@ -66,7 +66,7 @@ void computeJulia(Window2D &window2D, Window3D &window3D,
                      window2D.xOffset, window2D.yOffset, dTargetTex2D, stream);
   else
   {
-    computeJuliaAvx(window2D.width, window2D.height, window2D.c, window2D.zoomLevel,
+    computeJuliaAvx(window2D.width, window2D.height, false, window2D.c, window2D.zoomLevel,
                     window2D.xOffset, window2D.yOffset, window2D.hCudaBuffers[bufferIndex]);
     CUDA_CHECK(cudaMemcpyAsync(dTargetTex2D, window2D.hCudaBuffers[bufferIndex],
                                window2D.width * window2D.height * sizeof(float),
@@ -119,10 +119,10 @@ int main()
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
   glfwWindowHint(GLFW_SAMPLES, 16);
-  #ifndef NDEBUG
+#ifndef NDEBUG
   glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, true);
-  #endif
-  
+#endif
+
   GLFWmonitor *primaryMonitor = glfwGetPrimaryMonitor();
   const GLFWvidmode *mode = glfwGetVideoMode(primaryMonitor);
   glfwWindowHint(GLFW_RED_BITS, mode->redBits);
@@ -161,7 +161,6 @@ int main()
   CUDA_CHECK(cudaStreamSynchronize(stream));
   CUDA_CHECK(cudaStreamDestroy(stream));
   CUDA_CHECK(cudaMalloc(&nppBuffer, std::max(minMaxBufferSize, errorBufferSize)));
-
 
   GLFWwindow *windowPtr;
   windowPtr = glfwCreateWindow(width * 2, height, "Julia", primaryMonitor, NULL);

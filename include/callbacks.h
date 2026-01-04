@@ -3,17 +3,21 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
+#include "imsave.h"
 #include "labeling.h"
 #include "window_2d.h"
 
-inline void framebufferSizeCallback(GLFWwindow *window, int width, int height)
+inline void framebufferSizeCallback(GLFWwindow *window, int width,
+                                    int height) // TODO: fix or remove
 {
   glViewport(0, 0, width, height);
 }
 
-inline void mouseCallback(GLFWwindow *window, double xposIn, double yposIn)
+inline void mouseCallback(GLFWwindow *window, double xposIn,
+                          double yposIn) // TODO: unused
 {
-  Window2D *window2d = static_cast<Window2D *>(glfwGetWindowUserPointer(window));
+  Window2D *window2d =
+      static_cast<Window2D *>(glfwGetWindowUserPointer(window));
 
   window2d->lastMouseX = xposIn;
   window2d->lastMouseY = yposIn;
@@ -21,7 +25,8 @@ inline void mouseCallback(GLFWwindow *window, double xposIn, double yposIn)
 
 inline void scrollCallback(GLFWwindow *window, double xOffset, double yOffset)
 {
-  Window2D *window2d = static_cast<Window2D *>(glfwGetWindowUserPointer(window));
+  Window2D *window2d =
+      static_cast<Window2D *>(glfwGetWindowUserPointer(window));
 
   window2d->updatePrecision();
 
@@ -42,15 +47,19 @@ inline void scrollCallback(GLFWwindow *window, double xOffset, double yOffset)
   int minDim = std::min(width, height);
   float xScale = (float)width / minDim;
   float yScale = (float)height / minDim;
-  window2d->xOffset -= (1.0 - 1.0 / 1.1) * (xPos / window2d->width - 0.5) * xScale * 2.0 / oldZoom;
-  window2d->yOffset += (1.0 - 1.0 / 1.1) * (yPos / window2d->height - 0.5) * yScale * 2.0 / oldZoom;
+  window2d->xOffset -= (1.0 - 1.0 / 1.1) * (xPos / window2d->width - 0.5) *
+                       xScale * 2.0 / oldZoom;
+  window2d->yOffset += (1.0 - 1.0 / 1.1) * (yPos / window2d->height - 0.5) *
+                       yScale * 2.0 / oldZoom;
 
   window2d->needsRedraw = true;
 }
 
-inline void mouseButtonCallback(GLFWwindow *window, int button, int action, int mods)
+inline void mouseButtonCallback(GLFWwindow *window, int button, int action,
+                                int mods)
 {
-  Window2D *window2d = static_cast<Window2D *>(glfwGetWindowUserPointer(window));
+  Window2D *window2d =
+      static_cast<Window2D *>(glfwGetWindowUserPointer(window));
 
   if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS)
   {
@@ -68,7 +77,8 @@ inline void mouseButtonCallback(GLFWwindow *window, int button, int action, int 
   }
 }
 
-inline void keyCallback(GLFWwindow *window, int key, int scancode, int action, int mods)
+inline void keyCallback(GLFWwindow *window, int key, int scancode, int action,
+                        int mods)
 {
   if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
   {
@@ -76,17 +86,33 @@ inline void keyCallback(GLFWwindow *window, int key, int scancode, int action, i
   }
   if (key == GLFW_KEY_SPACE && action == GLFW_PRESS)
   {
-    Window2D *window2d = static_cast<Window2D *>(glfwGetWindowUserPointer(window));
+    Window2D *window2d =
+        static_cast<Window2D *>(glfwGetWindowUserPointer(window));
     window2d->paused = !window2d->paused;
   }
-  if (key == GLFW_KEY_1)
+  if (key == GLFW_KEY_1 && action == GLFW_PRESS)
   {
-    Window2D *window2d = static_cast<Window2D *>(glfwGetWindowUserPointer(window));
-    saveImage(window2d, true);
+    Window2D *window2d =
+        static_cast<Window2D *>(glfwGetWindowUserPointer(window));
+    labelImage(window2d, true);
   }
-  if (key == GLFW_KEY_2)
+  if (key == GLFW_KEY_2 && action == GLFW_PRESS)
   {
-    Window2D *window2d = static_cast<Window2D *>(glfwGetWindowUserPointer(window));
-    saveImage(window2d, false);
+    Window2D *window2d =
+        static_cast<Window2D *>(glfwGetWindowUserPointer(window));
+    labelImage(window2d, false);
+  }
+  if (key == GLFW_KEY_X && action == GLFW_PRESS)
+  {
+    Window2D *window2d =
+        static_cast<Window2D *>(glfwGetWindowUserPointer(window));
+    saveImage(window2d);
+  }
+  if (key == GLFW_KEY_F11 && action == GLFW_PRESS)
+  {
+    Window2D *window2d =
+        static_cast<Window2D *>(glfwGetWindowUserPointer(window));
+    window2d->cinematicMode = !window2d->cinematicMode;
+    window2d->needsRedraw = true;
   }
 }

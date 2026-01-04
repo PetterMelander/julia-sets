@@ -3,13 +3,13 @@ out vec4 FragColor;
 
 in vec2 TexCoord;
 
-uniform sampler2D texture1;
+uniform sampler2D juliaTexRaw;
 
 const vec3 kPhases = vec3(5.423, 4.359, 1.150);
 
 void main()
 {
-    float intensity = texture(texture1, TexCoord).r;
+    float intensity = texture(juliaTexRaw, TexCoord).r;
     if (intensity < 2500.0)
     {
         FragColor.rgb = sin(vec3(intensity * 0.05) + kPhases) * 0.5 + 0.5;

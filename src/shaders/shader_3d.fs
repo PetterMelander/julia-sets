@@ -6,14 +6,16 @@ in vec3 fragPos;
 in vec4 fragPosLightSpace;
 in vec2 uv;
 
+const int numAoSamples = 32;
+
 uniform vec3 viewPos;
 uniform sampler2D heightMap;
 uniform sampler2D shadowMap;
-uniform vec2 aoSamples[16];
+uniform vec2 aoSamples[numAoSamples];
 
-const vec3 lightColor = vec3(0.5, 0.5, 0.5);
+const vec3 lightColor = vec3(0.6, 0.6, 0.6);
 const vec3 lightDir = vec3(0.4472135955, 0.894427191, 0.0);
-const vec3 ambient = vec3(0.2, 0.2, 0.2);
+const vec3 ambient = vec3(0.25, 0.25, 0.25);
 const float specularStrength = 0.5;
 const vec3 gammaInv = vec3(1.0/2.2);
 
@@ -41,13 +43,12 @@ float shadowCalculation(vec4 fragPosLightSpace, vec3 norm)
 
 float occlusionCalculation(vec2 uv, float fragHeight, vec3 norm)
 {
-    const int numSamples = 16;
     const float sampleRadius = 0.01;
     const float bias = 0.0001;
 
     float occlusion = 0.0;
 
-    for (int i = 0; i < numSamples; ++i) {
+    for (int i = 0; i < numAoSamples; ++i) {
         vec2 sampleOffset = sampleRadius * aoSamples[i] * (1.0 - abs(norm.xz));
         float sampleHeight = texture(heightMap, uv + sampleOffset).r;
         vec3 positionDiff = vec3(
@@ -58,7 +59,7 @@ float occlusionCalculation(vec2 uv, float fragHeight, vec3 norm)
         float heightAboveNormalPlane = dot(positionDiff, norm);
         if (heightAboveNormalPlane > bias)
         {
-            occlusion += clamp(heightAboveNormalPlane * 2.0, 0.0, 0.1);
+            occlusion += clamp(heightAboveNormalPlane, 0.0, 0.05);
         }
     }
     return occlusion;
@@ -67,8 +68,6 @@ float occlusionCalculation(vec2 uv, float fragHeight, vec3 norm)
 void main()
 {
     // float height = log(4.0 * fragPos.y) * 0.2 * 0.5 * -1.0 - 0.25;
-    // float height = fragPos.y;
-    // float height = 1.0 / (1.0 + exp(-fragPos.y * 20.0 + 2.5)) * 0.25;
     float height = (fragPos.y * 4.0 * 1.0 - 0.5) * 2.0 / 3.0;
     height = height / (1.0 + abs(height));
     vec3 color = vec3((0.25 + height) * 1.0, (0.25 - height) * 0.5, (0.25 - height) * 2.0);

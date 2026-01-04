@@ -22,7 +22,6 @@ extern "C"
 #endif
 
 NppStreamContext ctx;
-CNNModel cnn("medium.trt", "medium.onnx");
 
 void computeJulia(Window2D &window, Npp8u *nppBuffer)
 {
@@ -35,21 +34,24 @@ void computeJulia(Window2D &window, Npp8u *nppBuffer)
   {
     CUDA_CHECK(cudaGraphicsMapResources(2, window.cudaPboResources, stream));
     CUDA_CHECK(cudaGraphicsResourceGetMappedPointer(
-        (void **)&dPrevTex, nullptr, window.cudaPboResources[window.getBufferIndex()]));
+        (void **)&dPrevTex, nullptr,
+        window.cudaPboResources[window.getBufferIndex()]));
   }
   else
-    CUDA_CHECK(cudaGraphicsMapResources(1, &window.cudaPboResources[bufferIndex], stream));
+    CUDA_CHECK(cudaGraphicsMapResources(
+        1, &window.cudaPboResources[bufferIndex], stream));
 
   CUDA_CHECK(cudaGraphicsResourceGetMappedPointer(
       (void **)&dTargetTex, nullptr, window.cudaPboResources[bufferIndex]));
 
   if (window.spSufficient())
-    computeJuliaCuda(window.width, window.height, window.c, window.zoomLevel, window.xOffset,
-                     window.yOffset, dTargetTex, stream);
+    computeJuliaCuda(window.width, window.height, window.c, window.zoomLevel,
+                     window.xOffset, window.yOffset, dTargetTex, stream);
   else
   {
-    computeJuliaAvx(window.width, window.height, window.c, window.zoomLevel, window.xOffset,
-                    window.yOffset, window.hCudaBuffers[bufferIndex]);
+    computeJuliaAvx(window.width, window.height, false, window.c, window.zoomLevel,
+                    window.xOffset, window.yOffset,
+                    window.hCudaBuffers[bufferIndex]);
     CUDA_CHECK(cudaMemcpyAsync(dTargetTex, window.hCudaBuffers[bufferIndex],
                                window.width * window.height * sizeof(float),
                                cudaMemcpyHostToDevice, stream));
@@ -59,24 +61,17 @@ void computeJulia(Window2D &window, Npp8u *nppBuffer)
   {
     ctx.hStream = stream;
     NPP_CHECK(nppiAverageRelativeError_32f_C1R_Ctx(
-        dTargetTex,
-        window.width * sizeof(float),
-        dPrevTex,
-        window.width * sizeof(float),
-        NppiSize{window.width, window.height},
-        window.dUpdateRelativeError,
-        nppBuffer,
-        ctx));
-    CUDA_CHECK(cudaMemcpyAsync(
-        window.hUpdateRelativeError,
-        window.dUpdateRelativeError,
-        sizeof(Npp64f),
-        cudaMemcpyDeviceToHost,
-        stream));
+        dTargetTex, window.width * sizeof(float), dPrevTex,
+        window.width * sizeof(float), NppiSize{window.width, window.height},
+        window.dUpdateRelativeError, nppBuffer, ctx));
+    CUDA_CHECK(cudaMemcpyAsync(window.hUpdateRelativeError,
+                               window.dUpdateRelativeError, sizeof(Npp64f),
+                               cudaMemcpyDeviceToHost, stream));
     CUDA_CHECK(cudaGraphicsUnmapResources(2, window.cudaPboResources, stream));
   }
   else
-    CUDA_CHECK(cudaGraphicsUnmapResources(1, &window.cudaPboResources[bufferIndex], stream));
+    CUDA_CHECK(cudaGraphicsUnmapResources(
+        1, &window.cudaPboResources[bufferIndex], stream));
 }
 
 int main()
@@ -100,8 +95,9 @@ int main()
   int width = mode->width * 0.75;
   int height = mode->height * 0.75;
 
-  // width must be multiple of 8 for avx kernel to work
-  width = (width + 7) / 8 * 8;
+  // width and height must be multiple of 32 for avx kernel to work
+  width = (width + 31) / 32 * 32;
+  height = (height + 31) / 32 * 32;
 
   cudaStream_t stream;
   CUDA_CHECK(cudaStreamCreate(&stream));
@@ -116,12 +112,13 @@ int main()
   ctx.nSharedMemPerBlock = props.sharedMemPerBlock;
   ctx.hStream = stream;
   NppiSize size{width, height};
-  size_t nppBufferSize;
-  NPP_CHECK(nppiAverageRelativeErrorGetBufferHostSize_32f_C1R_Ctx(size, &nppBufferSize, ctx));
+  size_t nppMinMaxBufSize;
+  NPP_CHECK(nppiAverageRelativeErrorGetBufferHostSize_32f_C1R_Ctx(
+      size, &nppMinMaxBufSize, ctx));
   Npp8u *nppBuffer;
   CUDA_CHECK(cudaStreamSynchronize(stream));
   cudaStreamDestroy(stream);
-  CUDA_CHECK(cudaMalloc(&nppBuffer, nppBufferSize));
+  CUDA_CHECK(cudaMalloc(&nppBuffer, nppMinMaxBufSize));
 
   GLFWwindow *windowPtr;
   windowPtr = glfwCreateWindow(width, height, "Julia", NULL, NULL);

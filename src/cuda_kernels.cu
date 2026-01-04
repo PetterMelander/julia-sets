@@ -1,8 +1,5 @@
 #include "cuda_kernels.cuh"
 
-constexpr int BLOCK_SIZE_JULIA = 16;
-constexpr int BLOCK_SIZE_NORMALS = 32;
-
 __device__ __forceinline__ float2 operator+(const float2 a, const float2 b)
 {
   return make_float2(a.x + b.x, a.y + b.y);
@@ -48,8 +45,10 @@ __device__ float evaluate(float2 z, const float2 c)
   return retval;
 }
 
-__global__ void julia(float *const __restrict__ buffer, const float2 planeTopLeft,
-                      const float2 pixelStep, const float2 c, const int width, const int height)
+template <bool symmetric>
+__global__ void juliaKernelCuda(float *const __restrict__ buffer, const float2 planeTopLeft,
+                                const float2 pixelStep, const float2 c,
+                                const int width, const int height)
 {
   int xIdx = blockIdx.x * blockDim.x + threadIdx.x;
   int yIdx = blockIdx.y * blockDim.y + threadIdx.y;
@@ -62,18 +61,22 @@ __global__ void julia(float *const __restrict__ buffer, const float2 planeTopLef
 
     float intensity = evaluate(z, c);
     buffer[yIdx * width + xIdx] = intensity;
+    if constexpr (symmetric)
+      buffer[(height - yIdx - 1) * width + (width - xIdx - 1)] = intensity;
   }
 }
 
 void computeJuliaCuda(int width, int height, std::complex<double> c, double zoomLevel,
                       double xOffset, double yOffset, float *buffer, cudaStream_t stream)
 {
+  constexpr int BLOCK_SIZE = 8;
+
   float2 C = make_float2(c.real(), c.imag());
 
   int minDim = std::min(width, height);
   float viewWidth = 2.0f * ((float)width / (minDim * zoomLevel));
   float viewHeight = 2.0f * ((float)height / (minDim * zoomLevel));
-  
+
   float2 pixelStep;
   pixelStep.x = viewWidth / (width - 1);
   pixelStep.y = viewHeight / (height - 1);
@@ -82,11 +85,23 @@ void computeJuliaCuda(int width, int height, std::complex<double> c, double zoom
   planeTopLeft.x = -(viewWidth / 2.0f) - (float)xOffset;
   planeTopLeft.y = -(viewHeight / 2.0f) - (float)yOffset;
 
-  unsigned int gridHeight = (height + BLOCK_SIZE_JULIA - 1) / BLOCK_SIZE_JULIA;
-  unsigned int gridWidth = (width + BLOCK_SIZE_JULIA - 1) / BLOCK_SIZE_JULIA;
-  dim3 gridDims{gridWidth, gridHeight};
-  dim3 blockDims{BLOCK_SIZE_JULIA, BLOCK_SIZE_JULIA};
-  julia<<<gridDims, blockDims, 0, stream>>>(buffer, planeTopLeft, pixelStep, C, width, height);
+  dim3 blockDim{BLOCK_SIZE, BLOCK_SIZE};
+  unsigned int gridWidth = (width + BLOCK_SIZE - 1) / BLOCK_SIZE;
+  dim3 gridDim;
+  gridDim.x = gridWidth;
+  bool symmetric = xOffset == 0.0 && yOffset == 0.0;
+  if (symmetric)
+  {
+    unsigned int gridHeight = (height / 2 + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    gridDim.y = gridHeight;
+    juliaKernelCuda<true><<<gridDim, blockDim, 0, stream>>>(buffer, planeTopLeft, pixelStep, C, width, height);
+  }
+  else
+  {
+    unsigned int gridHeight = (height + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    gridDim.y = gridHeight;
+    juliaKernelCuda<false><<<gridDim, blockDim, 0, stream>>>(buffer, planeTopLeft, pixelStep, C, width, height);
+  }
   CUDA_CHECK(cudaGetLastError());
 }
 
@@ -191,13 +206,14 @@ __global__ void compute_normals(const float *__restrict__ const h, float2 *__res
 
 void computeNormalsCuda(int width, int height, float *const h, float *out, cudaStream_t stream)
 {
-  unsigned int gridHeight = (height + BLOCK_SIZE_NORMALS - 1) / BLOCK_SIZE_NORMALS;
-  unsigned int gridWidth = (width + BLOCK_SIZE_NORMALS - 1) / BLOCK_SIZE_NORMALS;
+  constexpr int BLOCK_SIZE = 32;
+  unsigned int gridHeight = (height + BLOCK_SIZE - 1) / BLOCK_SIZE;
+  unsigned int gridWidth = (width + BLOCK_SIZE - 1) / BLOCK_SIZE;
   dim3 gridDims{gridWidth, gridHeight};
-  dim3 blockDims{BLOCK_SIZE_NORMALS, BLOCK_SIZE_NORMALS};
+  dim3 blockDims{BLOCK_SIZE, BLOCK_SIZE};
 
   float2 *out_f2 = reinterpret_cast<float2 *>(out);
-  compute_normals<BLOCK_SIZE_NORMALS, BLOCK_SIZE_NORMALS>
+  compute_normals<BLOCK_SIZE, BLOCK_SIZE>
       <<<gridDims, blockDims, 0, stream>>>(h, out_f2, height, width);
   CUDA_CHECK(cudaGetLastError());
 }
@@ -225,14 +241,18 @@ __global__ void scaleImage(const int dsize, const float *__restrict__ const imgM
 
 void rescaleImage(int width, int height, float *imgMin, float *imgMax, float *h, cudaStream_t stream)
 {
+  constexpr int BLOCK_SIZE = 512;
   unsigned int dsize = width * height;
-  int block_size = 512;
-  int num_blocks = (dsize + block_size - 1) / block_size;
-  scaleImage<<<num_blocks, block_size, 0, stream>>>(dsize, imgMin, imgMax, h);
+  int num_blocks = (dsize + BLOCK_SIZE - 1) / BLOCK_SIZE;
+  scaleImage<<<num_blocks, BLOCK_SIZE, 0, stream>>>(dsize, imgMin, imgMax, h);
   CUDA_CHECK(cudaGetLastError());
 }
 
-__global__ void updateScale(float *__restrict__ const oldMin, float *__restrict__ const newMin, float *__restrict__ const oldMax, float *__restrict__ const newMax)
+__global__ void updateScale(
+    float *__restrict__ const oldMin,
+    float *__restrict__ const newMin,
+    float *__restrict__ const oldMax,
+    float *__restrict__ const newMax)
 {
   if (threadIdx.x == 0)
   {

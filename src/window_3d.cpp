@@ -27,7 +27,7 @@ Window3D::Window3D(int width, int height, GLFWwindow *windowPtr)
   int minDim = std::min(width, height);
   double xStep = 2.0 * ((double)width / minDim) / (double)(width - 1);
   double yStep = 2.0 * ((double)height / minDim) / (double)(height - 1);
-  #pragma omp parallel for
+#pragma omp parallel for
   for (int y = 0; y < height; ++y)
   {
     for (int x = 0; x < width; ++x)
@@ -51,7 +51,7 @@ Window3D::Window3D(int width, int height, GLFWwindow *windowPtr)
     }
   }
 
-  constexpr size_t aoNumSamples = 16;
+  constexpr size_t aoNumSamples = 32;
   std::uniform_real_distribution<float> randomAngles(0.0, 2 * glm::pi<float>());
   std::uniform_real_distribution<float> randomRadii(0.0, 1.0);
   std::default_random_engine generator;
@@ -100,6 +100,7 @@ Window3D::Window3D(int width, int height, GLFWwindow *windowPtr)
     glEnableVertexAttribArray(1);
   }
 
+  glActiveTexture(GL_TEXTURE2);
   glGenTextures(1, &heightMap);
   glBindTexture(GL_TEXTURE_2D, heightMap);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -109,6 +110,7 @@ Window3D::Window3D(int width, int height, GLFWwindow *windowPtr)
   // set up resources for shadows
   glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
   glGenFramebuffers(1, &depthMapFBO);
+  glActiveTexture(GL_TEXTURE3);
   glGenTextures(1, &depthMap);
   glBindTexture(GL_TEXTURE_2D, depthMap);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT16, SHADOW_WIDTH, SHADOW_HEIGHT, 0,
@@ -129,32 +131,94 @@ Window3D::Window3D(int width, int height, GLFWwindow *windowPtr)
   depthShader = std::make_unique<Shader>("shaders/shader_3d_shadow.vs", "shaders/shader_3d_shadow.fs");
   depthShader->use();
   depthShader->setMat4("lightSpaceMatrix", lightSpaceMatrix);
-  depthShader->setInt("heightMap", 1);
+  depthShader->setInt("heightMap", 2);
   if (width > height)
-    depthShader->setVec2("texStretching", glm::vec2((float)height/(float)width, 1.0));
+    depthShader->setVec2("texStretching", glm::vec2((float)height / (float)width, 1.0));
   else
-    depthShader->setVec2("texStretching", glm::vec2(1.0, (float)width/(float)height));
+    depthShader->setVec2("texStretching", glm::vec2(1.0, (float)width / (float)height));
 
   // set window parameters and callbacks
   glEnable(GL_DEPTH_TEST);
   glEnable(GL_CULL_FACE);
-  // glEnable(GL_FRAMEBUFFER_SRGB);
 
   // init shader
   shader = std::make_unique<Shader>("shaders/shader_3d.vs", "shaders/shader_3d.fs");
   shader->use();
-  shader->setInt("heightMap", 1);
+  shader->setInt("heightMap", 2);
   if (width > height)
-    shader->setVec2("texStretching", glm::vec2((float)height/(float)width, 1.0));
+    shader->setVec2("texStretching", glm::vec2((float)height / (float)width, 1.0));
   else
-    shader->setVec2("texStretching", glm::vec2(1.0, (float)width/(float)height));
+    shader->setVec2("texStretching", glm::vec2(1.0, (float)width / (float)height));
   shader->setFloat("xstep", 2.0f * ((float)width / minDim) / (float)(width - 1));
   shader->setFloat("ystep", 2.0f * ((float)height / minDim) / (float)(height - 1));
   shader->setVec3("viewPos", camera.front);
   shader->setMat4("lightSpaceMatrix", lightSpaceMatrix);
-  shader->setInt("shadowMap", 2);
+  shader->setInt("shadowMap", 3);
   for (unsigned int i = 0; i < aoNumSamples; ++i)
   {
     shader->setVec2("aoSamples[" + std::to_string(i) + "]", aoKernel[i]);
+  }
+}
+
+void Window3D::switchTexture(int index)
+{
+  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pboIds[index]);
+  glTextureSubImage2D(heightMap, 0, 0, 0, width, height, GL_RED, GL_FLOAT, 0);
+}
+
+void Window3D::redrawImage(int index, bool depthPass)
+{
+  if (depthPass)
+  {
+    depthShader->use();
+    glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
+    glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
+    glClear(GL_DEPTH_BUFFER_BIT);
+    glBindVertexArray(vaoIds[index]);
+    glDrawElements(GL_TRIANGLES, 3 * 2 * (height - 1) * (width - 1), GL_UNSIGNED_INT, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  }
+
+  // main pass
+  glViewport(width, 0, width, height);
+  glEnable(GL_MULTISAMPLE);
+
+  shader->use();
+  glBindVertexArray(vaoIds[index]);
+  glDrawElements(GL_TRIANGLES, 3 * 2 * (height - 1) * (width - 1), GL_UNSIGNED_INT, 0);
+
+  glDisable(GL_MULTISAMPLE);
+  needsRedraw = false;
+}
+
+void Window3D::processMovement(float deltaTime)
+{
+  if (glfwGetKey(windowPtr, GLFW_KEY_W) == GLFW_PRESS)
+  {
+    camera.ProcessKeyboard(FORWARD, deltaTime);
+    shader->use();
+    shader->setVec3("viewPos", camera.front);
+    needsRedraw = true;
+  }
+  if (glfwGetKey(windowPtr, GLFW_KEY_S) == GLFW_PRESS)
+  {
+    camera.ProcessKeyboard(BACKWARD, deltaTime);
+    shader->use();
+    shader->setVec3("viewPos", camera.front);
+    needsRedraw = true;
+  }
+  if (glfwGetKey(windowPtr, GLFW_KEY_A) == GLFW_PRESS)
+  {
+    camera.ProcessKeyboard(LEFT, deltaTime);
+    shader->use();
+    shader->setVec3("viewPos", camera.front);
+    needsRedraw = true;
+  }
+  if (glfwGetKey(windowPtr, GLFW_KEY_D) == GLFW_PRESS)
+  {
+    camera.ProcessKeyboard(RIGHT, deltaTime);
+    shader->use();
+    shader->setVec3("viewPos", camera.front);
+    needsRedraw = true;
   }
 }

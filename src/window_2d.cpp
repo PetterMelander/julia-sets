@@ -1,3 +1,4 @@
+#define STB_IMAGE_IMPLEMENTATION
 
 #include <cmath>
 #include <iostream>
@@ -5,6 +6,7 @@
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
+#include <stb_image.h>
 
 #include <cuda_gl_interop.h>
 #include <cuda_runtime.h>
@@ -86,7 +88,7 @@ void APIENTRY glDebugOutput(GLenum source, GLenum type, unsigned int id,
 #endif
 
 Window2D::Window2D(int width, int height, GLFWwindow *windowPtr)
-: windowPtr(windowPtr), width(width), height(height)
+    : windowPtr(windowPtr), width(width), height(height)
 {
 
 #ifndef NDEBUG
@@ -98,18 +100,21 @@ Window2D::Window2D(int width, int height, GLFWwindow *windowPtr)
     glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS); // Makes sure errors are displayed at
                                            // the moment they happen
     glDebugMessageCallback(glDebugOutput, nullptr);
-    glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_TRUE);
+    glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr,
+                          GL_TRUE);
   }
 #endif
 
   // allocate buffers, texture, etc.
+  // avx kernel requires dimensions to be multiples of box size. usually not a problem for width
   int dSize = width * height * sizeof(float);
+  int allocSize = width * ((height + 31) / 32) * 32 * sizeof(float);
   glGenBuffers(2, pboIds);
   for (int i = 0; i < 2; ++i)
   {
     CUDA_CHECK(cudaStreamCreate(&streams[i]));
 
-    CUDA_CHECK(cudaMallocHost(&hCudaBuffers[i], dSize));
+    CUDA_CHECK(cudaMallocHost(&hCudaBuffers[i], allocSize));
 
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pboIds[i]);
     glBufferData(GL_PIXEL_UNPACK_BUFFER, dSize, 0, GL_DYNAMIC_DRAW);
@@ -118,29 +123,78 @@ Window2D::Window2D(int width, int height, GLFWwindow *windowPtr)
                                             cudaGraphicsMapFlagsNone));
   }
 
-  glGenTextures(1, &texture);
-  glBindTexture(GL_TEXTURE_2D, texture);
+  glActiveTexture(GL_TEXTURE0);
+  glGenTextures(1, &juliaTex);
+  glBindTexture(GL_TEXTURE_2D, juliaTex);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, width, height, 0, GL_RED, GL_FLOAT, 0);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, width, height, 0, GL_RED, GL_FLOAT,
+               0);
 
   glGenVertexArrays(1, &vao);
   glBindVertexArray(vao);
 
   float quadVertices[] = {
-   -1.0f,  1.0f, 0.0f, 1.0f,
-   -1.0f, -1.0f, 0.0f, 0.0f,
-    1.0f,  1.0f, 1.0f, 1.0f,
-    1.0f, -1.0f, 1.0f, 0.0f,
+      -1.0f,
+      1.0f,
+      0.0f,
+      1.0f,
+      -1.0f,
+      -1.0f,
+      0.0f,
+      0.0f,
+      1.0f,
+      1.0f,
+      1.0f,
+      1.0f,
+      1.0f,
+      -1.0f,
+      1.0f,
+      0.0f,
   };
   glGenBuffers(1, &vbo);
   glBindBuffer(GL_ARRAY_BUFFER, vbo);
-  glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), quadVertices, GL_STATIC_DRAW);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), quadVertices,
+               GL_STATIC_DRAW);
 
   glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)0);
   glEnableVertexAttribArray(0);
-  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)(2 * sizeof(float)));
+  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float),
+                        (void *)(2 * sizeof(float)));
   glEnableVertexAttribArray(1);
+
+  glGenFramebuffers(1, &cFbo);
+  glBindFramebuffer(GL_FRAMEBUFFER, cFbo);
+  glActiveTexture(GL_TEXTURE15);
+  glGenTextures(1, &cTex);
+  glBindTexture(GL_TEXTURE_2D, cTex);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, cPlotSize, cPlotSize, 0, GL_RGBA,
+               GL_FLOAT, NULL);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                         cTex, 0);
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+  glGenVertexArrays(1, &cVao);
+  glBindVertexArray(cVao);
+  glGenBuffers(1, &cVbo);
+  glBindBuffer(GL_ARRAY_BUFFER, cVbo);
+  glBufferData(GL_ARRAY_BUFFER, 2 * sizeof(float), NULL, GL_DYNAMIC_DRAW);
+  glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void *)0);
+  glEnableVertexAttribArray(0);
+  glPointSize(1.5f);
+
+  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+  int x, y, n;
+  unsigned char *mandelbrotData = stbi_load("mandelbrot_boundary.png", &x, &y, &n, 0);
+  glActiveTexture(GL_TEXTURE1);
+  glGenTextures(1, &mandelbrotTex);
+  glBindTexture(GL_TEXTURE_2D, mandelbrotTex);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, x, y, 0, GL_RED, GL_UNSIGNED_BYTE, mandelbrotData);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  stbi_image_free(mandelbrotData);
 
   // set window parameters and callbacks
   glfwSwapInterval(1);
@@ -154,22 +208,41 @@ Window2D::Window2D(int width, int height, GLFWwindow *windowPtr)
   glfwSetFramebufferSizeCallback(windowPtr, framebufferSizeCallback);
 
   // init shader
-  shader = std::make_unique<Shader>("shaders/shader_2d.vs", "shaders/shader_2d.fs");
+  shader =
+      std::make_unique<Shader>("shaders/shader_2d.vs", "shaders/shader_2d.fs");
   shader->use();
-  shader->setInt("texture1", 0);
+  shader->setInt("juliaTexRaw", 0);
+
+  cPointShader = std::make_unique<Shader>("shaders/shader_point.vs",
+                                          "shaders/shader_point.fs");
+  cPointShader->use();
+  cPointShader->setFloat("speed", 0.0f);
+  cFadeShader = std::make_unique<Shader>("shaders/shader_fade.vs",
+                                         "shaders/shader_fade.fs");
+  cFadeShader->use();
+  cFadeShader->setFloat("increment", 0.0f);
+
+  cBackgroundShader = std::make_unique<Shader>("shaders/shader_bg.vs",
+                                               "shaders/shader_bg.fs");
+  cBackgroundShader->use();
+  cBackgroundShader->setInt("mandelbrot", 1);
 
   // init Npp vars
   CUDA_CHECK(cudaMalloc(&dUpdateRelativeError, sizeof(Npp64f)));
   CUDA_CHECK(cudaMallocHost(&hUpdateRelativeError, sizeof(double)));
 
-  updateC();
+  manualUpdateC();
   float *tex1 = nullptr;
   float *tex2 = nullptr;
   CUDA_CHECK(cudaGraphicsMapResources(2, cudaPboResources, streams[0]));
-  CUDA_CHECK(cudaGraphicsResourceGetMappedPointer((void **)&tex1, nullptr, cudaPboResources[0]));
-  CUDA_CHECK(cudaGraphicsResourceGetMappedPointer((void **)&tex2, nullptr, cudaPboResources[1]));
-  computeJuliaCuda(width, height, c, zoomLevel, xOffset, yOffset, tex1, streams[0]);
-  computeJuliaCuda(width, height, c, zoomLevel, xOffset, yOffset, tex2, streams[0]);
+  CUDA_CHECK(cudaGraphicsResourceGetMappedPointer((void **)&tex1, nullptr,
+                                                  cudaPboResources[0]));
+  CUDA_CHECK(cudaGraphicsResourceGetMappedPointer((void **)&tex2, nullptr,
+                                                  cudaPboResources[1]));
+  computeJuliaCuda(width, height, c, zoomLevel, xOffset, yOffset, tex1,
+                   streams[0]);
+  computeJuliaCuda(width, height, c, zoomLevel, xOffset, yOffset, tex2,
+                   streams[0]);
   CUDA_CHECK(cudaGraphicsUnmapResources(2, cudaPboResources, streams[0]));
   CUDA_CHECK(cudaStreamSynchronize(streams[0]));
 
@@ -189,4 +262,172 @@ Window2D::~Window2D()
 
   CUDA_CHECK(cudaFree(dLabelImage));
   delete[] hLabelImage;
+}
+
+void Window2D::updateState()
+{
+  CUDA_CHECK(cudaStreamSynchronize(streams[(activeBuffer + 1) % 2]));
+  updateTheta();
+  updatePan();
+  manualUpdateC();
+}
+
+void Window2D::redraw(bool switchTex)
+{
+  if (switchTex)
+  {
+    switchTexture(activeBuffer);
+  }
+  redrawImage();
+  if (needsRedraw)
+  {
+    needsRedraw = false;
+    needsTextureSwitch = true;
+  }
+  else if (needsTextureSwitch)
+  {
+    needsTextureSwitch = false;
+  }
+}
+
+void Window2D::updatePrecision()
+{
+  float minDim = std::min(width, height);
+  float newZoom = zoomLevel * powf(1.1f, 5.0f) * minDim / cnn.imgSize;
+
+  if (newZoom < 300.0f)
+  {
+    singlePrecision = true;
+    return;
+  }
+  else if (newZoom > 100000.0f)
+  {
+    singlePrecision = false;
+    return;
+  }
+
+  float result = 0;
+
+  // enqueue cnn pred
+  cnn.enqueue(c, newZoom, xOffset, yOffset);
+
+  // xgb pred
+  std::vector<Entry> entries(5);
+  entries[0].fvalue = ((float)c.real() - INPUT_MEANS[0]) / INPUT_STDS[0];
+  entries[1].fvalue = ((float)c.imag() - INPUT_MEANS[1]) / INPUT_STDS[1];
+  entries[2].fvalue = ((float)xOffset - INPUT_MEANS[2]) / INPUT_STDS[2];
+  entries[3].fvalue = ((float)yOffset - INPUT_MEANS[3]) / INPUT_STDS[3];
+  entries[4].fvalue =
+      ((float)log(newZoom + 1.0) - INPUT_MEANS[4]) / INPUT_STDS[4];
+  predict(entries.data(), 0, &result);
+
+  // mlp pred
+  float windowParams[] = {entries[0].fvalue, entries[1].fvalue,
+                          entries[2].fvalue, entries[3].fvalue,
+                          entries[4].fvalue};
+  result += 1.0f / (1.0f + expf(-mlpPredict(windowParams)));
+
+  // get cnn pred
+  result += 2.0f * 1.0f / (1.0f + expf(-cnn.getPred()));
+
+  // weight ensemble 1 - 1 - 2
+  result /= 4.0f;
+
+  singlePrecision = result >= 0.5f;
+}
+
+void Window2D::updatePan()
+{
+  if (trackingMouse) // TODO: incorporate into mouse callback?
+  {
+    double xPos, yPos;
+    glfwGetCursorPos(windowPtr, &xPos, &yPos);
+    xOffset -= (lastMouseX - xPos) / std::min(width, height) / zoomLevel * 2;
+    yOffset += (lastMouseY - yPos) / std::min(width, height) / zoomLevel * 2;
+
+    lastMouseX = xPos;
+    lastMouseY = yPos;
+    needsRedraw = true;
+  }
+}
+
+void Window2D::updateTheta()
+{
+  if (!paused)
+  {
+    double thetaUpdate = 0.7 * lastThetaUpdate +
+                         std::min(0.001, exp(-*hUpdateRelativeError * 10000)) +
+                         0.00001;
+    double gradientSize =
+        sqrt(pow(sqrt(2.0) * cos(theta), 2.0) + pow(cos(theta), 2.0));
+    thetaUpdate = std::min(lastThetaUpdate * 2.0, thetaUpdate);
+    lastThetaUpdate = thetaUpdate;
+    incrementTheta(thetaUpdate / std::max(gradientSize, 0.1));
+  }
+  else if (glfwGetKey(windowPtr, GLFW_KEY_COMMA) == GLFW_PRESS)
+  {
+    incrementTheta(-0.001 / zoomLevel);
+  }
+  else if (glfwGetKey(windowPtr, GLFW_KEY_PERIOD) == GLFW_PRESS)
+  {
+    incrementTheta(0.001 / zoomLevel);
+  }
+}
+
+void Window2D::incrementTheta(double increment)
+{
+  theta += increment;
+  c.real(1.2 * sin(sqrt(2.0) * theta) - 0.7);
+  c.imag(1.2 * sin(theta));
+  cFadeShader->use();
+  cFadeShader->setFloat("increment", 1.0f - std::abs(increment) * 0.001);
+  cPointShader->use();
+  cPointShader->setFloat("speed", 1.0f - std::abs(increment) * 200);
+  needsRedraw = true;
+}
+
+void Window2D::switchTexture(int index)
+{
+  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pboIds[index]);
+  glTextureSubImage2D(juliaTex, 0, 0, 0, width, height, GL_RED, GL_FLOAT, 0);
+}
+
+void Window2D::redrawImage()
+{
+  glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
+  
+  // draw julia set
+  glViewport(0, 0, width, height);
+  shader->use();
+  glBindVertexArray(vao);
+  glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+  if (!cinematicMode)
+  {
+    // fade c plot
+    glViewport(0, 0, cPlotSize, cPlotSize);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, cFbo);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, cFbo);
+    glEnable(GL_BLEND);
+    glBlendFuncSeparate(GL_ZERO, GL_ONE, GL_ZERO, GL_SRC_ALPHA);
+    cFadeShader->use();
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+    // blend with background
+    glBlendFunc(GL_ONE_MINUS_DST_ALPHA, GL_DST_ALPHA);
+    cBackgroundShader->use();
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+    // add new c point
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    cPointShader->use();
+    glBindVertexArray(cVao);
+    glDrawArrays(GL_POINTS, 0, 1);
+    glDisable(GL_BLEND);
+
+    // blit c plot to screen
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+    glBlitFramebuffer(0, 0, cPlotSize, cPlotSize, 0, height - cPlotSize,
+                      cPlotSize, height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+  }
 }

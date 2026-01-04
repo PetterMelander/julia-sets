@@ -29,9 +29,6 @@ public:
   glm::vec3 up;
   glm::mat4 projection;
 
-  // glm::vec3 prevFront; // necessary for drawing correct 
-  // glm::vec3 prevUp; // necessary for drawing correct 
-
   float yaw;
   float pitch;
 
